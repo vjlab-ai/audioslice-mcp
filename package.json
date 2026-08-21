@@ -1,0 +1,12 @@
+{
+  "name": "audioslice-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for AudioSlice - drive and diagnose audio-reactive OSC output from Claude.",
+  "type": "module",
+  "main": "server/index.js",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "manifest_version": "0.1",
+  "name": "audioslice",
+  "display_name": "AudioSlice",
+  "version": "0.1.0",
+  "description": "Set up and diagnose AudioSlice's audio-reactive OSC output from a conversation.",
+  "long_description": "Connects Claude to a running AudioSlice so you can ask what a track can drive, build OSC modulators for it, and work out why a receiver is showing nothing. Talks only to AudioSlice on your own machine over localhost, and makes no other network connections - the documentation it uses is bundled, so it behaves the same with or without an internet connection.",
+  "author": {
+    "name": "VJLab.ai",
+    "url": "https://vjlab.ai"
+  },
+  "homepage": "https://vjlab.ai",
+  "documentation": "https://vjlab.ai/docs/",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
+      "env": {
+        "AUDIOSLICE_PORT": "${user_config.port}",
+        "AUDIOSLICE_TOKEN": "${user_config.token}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "get_status",
+      "description": "Is AudioSlice running, hearing audio, and sending OSC?"
+    },
+    {
+      "name": "analyze_audio",
+      "description": "What is in the audio right now, per stem."
+    },
+    {
+      "name": "list_outputs",
+      "description": "List OSC destinations and their modulators."
+    },
+    {
+      "name": "describe_modulator",
+      "description": "Check whether one modulator is actually firing."
+    },
+    {
+      "name": "get_api_schema",
+      "description": "AudioSlice's own field reference."
+    },
+    {
+      "name": "create_osc_output",
+      "description": "Create an OSC destination."
+    },
+    {
+      "name": "create_modulator",
+      "description": "Add a modulator to an output."
+    },
+    {
+      "name": "update_modulator",
+      "description": "Change a modulator's settings."
+    },
+    {
+      "name": "delete_modulator",
+      "description": "Remove a modulator."
+    },
+    {
+      "name": "delete_output",
+      "description": "Remove an output and all its modulators."
+    },
+    {
+      "name": "set_tempo",
+      "description": "Change the tempo source or metronome BPM."
+    },
+    {
+      "name": "set_audioslice_token",
+      "description": "Store the API token, if one is set."
+    },
+    {
+      "name": "list_audio_devices",
+      "description": "List audio inputs and which is open."
+    },
+    {
+      "name": "select_audio_device",
+      "description": "Switch the audio input device."
+    },
+    {
+      "name": "tap_tempo",
+      "description": "Restart the beat grid, like 'Tap for 1'."
+    },
+    {
+      "name": "list_patches",
+      "description": "List saved configurations."
+    },
+    {
+      "name": "save_patch",
+      "description": "Save the current configuration by name."
+    },
+    {
+      "name": "load_patch",
+      "description": "Replace the configuration with a saved patch."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "what_can_i_do",
+      "description": "Analyse the track and suggest what to drive.",
+      "text": "What can I do with this track?"
+    },
+    {
+      "name": "setup_beat_lighting",
+      "description": "Create beat-synced OSC triggers.",
+      "text": "Set up beat-synced lighting"
+    },
+    {
+      "name": "debug_no_output",
+      "description": "Diagnose a receiver showing nothing.",
+      "text": "Why isn't my OSC arriving?"
+    },
+    {
+      "name": "review_setup",
+      "description": "Audit the current configuration.",
+      "text": "Review my current setup"
+    }
+  ],
+  "keywords": [
+    "audio",
+    "osc",
+    "vj",
+    "lighting",
+    "resolume",
+    "touchdesigner",
+    "music"
+  ],
+  "license": "Proprietary",
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "AudioSlice port",
+      "description": "Only needed if you changed the HTTP API port in AudioSlice's Advanced settings. Normally leave this alone - the port is detected automatically.",
+      "default": 8722,
+      "required": false
+    },
+    "token": {
+      "type": "string",
+      "title": "API token",
+      "description": "Only needed if you set a token in AudioSlice's Advanced settings. Leave empty otherwise - AudioSlice ships without one.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

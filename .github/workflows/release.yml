@@ -1,0 +1,69 @@
+# Runs in the PUBLIC audioslice-mcp repo.
+#
+# Pushing a v* tag builds the bundle and attaches it to a release, which gives
+# the permanent always-newest download URL:
+#
+#   https://github.com/vjlab-ai/audioslice-mcp/releases/latest/download/audioslice-mcp.mcpb
+#
+# Deliberately built here rather than uploaded from the private repo: this needs
+# no cross-repo credentials, and the published artifact is built from the source
+# in this repo, so anyone can reproduce it.
+name: Release MCP bundle
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Validate manifest
+        run: npx --yes @anthropic-ai/mcpb validate manifest.json
+
+      - name: Pack bundle
+        run: npx --yes @anthropic-ai/mcpb pack . audioslice-mcp.mcpb
+
+      # The bundle is embedded in a signed, notarized macOS app. Apple's notary
+      # service inspects nested archives, so an unsigned native binary in here
+      # fails notarization for the entire DMG. Catch it at publish time too, not
+      # only in the app build.
+      - name: Reject native modules
+        run: |
+          if unzip -l audioslice-mcp.mcpb | awk '{print $4}' | grep -q '\.node$'; then
+            echo "::error::Bundle contains a native module - this breaks notarization of the app."
+            unzip -l audioslice-mcp.mcpb | awk '{print $4}' | grep '\.node$'
+            exit 1
+          fi
+          echo "No native modules - notarization safe."
+
+      - name: Smoke-test the packed server
+        run: |
+          npx --yes @anthropic-ai/mcpb unpack audioslice-mcp.mcpb /tmp/unpacked
+          # It must start and speak MCP without AudioSlice present; tool calls
+          # will fail to connect, but listing tools must work.
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | node /tmp/unpacked/server/index.js | tee /tmp/out.jsonl
+          grep -q '"get_status"' /tmp/out.jsonl
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: audioslice-mcp.mcpb
+          generate_release_notes: true
