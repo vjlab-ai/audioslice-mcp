@@ -1,0 +1,66 @@
+{
+  "source": "vjlab-ai/website",
+  "sourceCommit": "7f7879b1eeb4936c495f7788712876ec06c2502d",
+  "pages": [
+    {
+      "slug": "what-is-audioslice",
+      "title": "What is AudioSlice? 🎵🗡️",
+      "file": "what-is-audioslice.md"
+    },
+    {
+      "slug": "installation",
+      "title": "Installing AudioSlice",
+      "file": "installation.md"
+    },
+    {
+      "slug": "audio-input",
+      "title": "Audio input",
+      "file": "audio-input.md"
+    },
+    {
+      "slug": "modulators",
+      "title": "Realtime musical outputs (modulators)",
+      "file": "modulators.md"
+    },
+    {
+      "slug": "envelope-creator",
+      "title": "Envelope creator",
+      "file": "envelope-creator.md"
+    },
+    {
+      "slug": "output-groups",
+      "title": "Output groups",
+      "file": "output-groups.md"
+    },
+    {
+      "slug": "tempo",
+      "title": "Tempo",
+      "file": "tempo.md"
+    },
+    {
+      "slug": "resolume",
+      "title": "Resolume",
+      "file": "resolume.md"
+    },
+    {
+      "slug": "touchdesigner",
+      "title": "TouchDesigner",
+      "file": "touchdesigner.md"
+    },
+    {
+      "slug": "synesthesia",
+      "title": "Synesthesia",
+      "file": "synesthesia.md"
+    },
+    {
+      "slug": "sentinel",
+      "title": "Sentinel",
+      "file": "sentinel.md"
+    },
+    {
+      "slug": "mcp",
+      "title": "AudioSlice MCP integration",
+      "file": "mcp.md"
+    }
+  ]
+}

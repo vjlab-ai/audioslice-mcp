@@ -95,7 +95,9 @@ export function formatSignals(sig) {
   lines.push("");
   lines.push(
     `"streams" lists what each stem actually carries. Asking for a stream a stem does not have ` +
-    `(e.g. onset on bass) produces silence with no error, so pick from these.`
+    `(e.g. pitch on drums) produces silence with no error, so pick from these. The one ` +
+    `exception is onset: asking for it on a stem with no onsets falls back to energy, so you ` +
+    `get a live signal rather than a dead modulator - but not the one you asked for.`
   );
   return lines.join("\n");
 }
@@ -145,10 +147,33 @@ export function formatOutputs(outputs) {
       if (m.switchMode) bits.push("switch mode");
       if (m.envEnable) bits.push("envelope");
       if (m.alpha > 0 && m.alpha < 1) bits.push(`smoothing ${Math.round(alphaToMs(m.alpha))}ms`);
+      if (m.envThreshold > 0) bits.push(`threshold ${m.envThreshold}`);
       if (!m.enabled) bits.push("DISABLED");
       const path = m.path ? m.path : "*** NO OSC PATH - sends nothing ***";
       lines.push(`     [${m.id}] ${path}  (${bits.join(", ")})`);
     }
   }
   return lines.length ? lines.join("\n") : "No outputs configured.";
+}
+
+/**
+ * Render documentation hits. Leads with where each passage came from, so an
+ * answer built from these can cite a page the user can actually go and read
+ * rather than presenting the docs as the assistant's own recollection.
+ */
+export function formatDocHits(hits, query) {
+  if (!hits.length) {
+    return `Nothing in the AudioSlice documentation matches "${query}". Try fewer or more ` +
+      `common words, or read_doc a page in full.`;
+  }
+  const out = [`AudioSlice documentation matching "${query}":`, ``];
+  for (const h of hits) {
+    const where = h.heading ? `${h.page} > ${h.heading}` : h.page;
+    out.push(`--- ${where}  (read_doc: ${h.slug})`);
+    out.push(h.text.length > 1200 ? h.text.slice(0, 1200).trimEnd() + "\n[...]" : h.text);
+    out.push(``);
+  }
+  out.push(`These are the shipped docs for this version. For live configuration values, use the`);
+  out.push(`other tools - the docs describe how things work, not what is currently set up.`);
+  return out.join("\n");
 }

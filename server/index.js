@@ -2,9 +2,9 @@
 // AudioSlice MCP server.
 //
 // Talks to a locally running AudioSlice over its localhost HTTP control API.
-// Makes no outbound network calls of any kind: documentation is baked in at
-// build time, so this behaves identically with or without an internet
-// connection - which matters at a venue.
+// Makes no outbound network calls of any kind: the user documentation is vendored
+// into docs/ at build time by sync-docs.mjs and read from disk, so this behaves
+// identically with or without an internet connection - which matters at a venue.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -16,7 +16,49 @@ import { homedir, platform } from "node:os";
 
 import { AudioSliceClient } from "./client.js";
 import { stemIndex, streamId, stemName, msToAlpha, STEMS, STREAMS } from "./stems.js";
-import { formatStatus, formatSignals, formatActivity, formatOutputs } from "./format.js";
+import { formatStatus, formatSignals, formatActivity, formatOutputs, formatDocHits } from "./format.js";
+import { searchDocs, readDoc, pageList, docsAvailable } from "./docs.js";
+import { TOOLS, PROMPTS } from "./descriptions.js";
+
+// descriptions.js is prose, so the lists that have to stay in step with the code -
+// stem names, stream names, the vendored doc pages - appear there as tokens rather
+// than as text somebody has to remember to update. Filled in here, once, at
+// registration.
+const FILL = {
+  "{{STEMS}}": () => STEMS.join(", "),
+  "{{STREAMS}}": () => Object.keys(STREAMS).join(", "),
+  "{{DOC_PAGES}}": () => pageList().join(", "),
+};
+function fill(s) {
+  let out = String(s);
+  for (const [token, value] of Object.entries(FILL)) {
+    if (out.includes(token)) out = out.split(token).join(value());
+  }
+  return out;
+}
+// Applied to every description at registration, so a token can never reach a model
+// unresolved no matter which entry it was written into.
+// Enumerating the valid values in the schema, rather than only naming them in prose,
+// lets a client reject a bad stem or page before it reaches AudioSlice and shows a
+// model the whole set without it having to parse a sentence.
+const DOC_PAGE = pageList().length ? z.enum(pageList()) : z.string();
+
+const T = new Proxy(TOOLS, {
+  get(target, name) {
+    const t = target[name];
+    if (!t) throw new Error(`No description entry for tool "${String(name)}"`);
+    return {
+      title: t.title,
+      description: fill(t.description),
+      args: new Proxy(t.args || {}, {
+        get(a, k) {
+          if (!(k in a)) throw new Error(`No description for ${String(name)}.${String(k)}`);
+          return fill(a[k]);
+        },
+      }),
+    };
+  },
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(readFileSync(join(HERE, "..", "package.json"), "utf8"));
@@ -52,16 +94,10 @@ const server = new McpServer({ name: "audioslice", version: PKG.version });
 server.registerTool(
   "get_status",
   {
-    title: "AudioSlice status",
-    description:
-      "Check whether AudioSlice is running, hearing audio, tracking tempo, keeping up with " +
-      "inference, and successfully transmitting OSC. Call this FIRST for any question about " +
-      "something not working - it distinguishes the four failure modes that look identical from " +
-      "the outside: not running, not hearing audio, not sending, or sending fine but the receiver " +
-      "is not listening. Also call it before configuring anything, so you know the tempo and " +
-      "whether there is signal to work with.",
+    title: T.get_status.title,
+    description: T.get_status.description,
     inputSchema: {},
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async () => {
     try {
@@ -75,24 +111,17 @@ server.registerTool(
 server.registerTool(
   "analyze_audio",
   {
-    title: "Analyze what is in the audio",
-    description:
-      "Summarise what the model is actually extracting from the audio right now, per stem, over a " +
-      "recent window: how loud each stem is, how much it moves, how many times it hits, and which " +
-      "data streams it carries. Call this before creating modulators, to choose a stem that has " +
-      "usable signal, and whenever the user asks what they could drive with a track. " +
-      "This reads the RAW model output - it is not affected by any modulator's settings, so it " +
-      "tells you about the music rather than about someone's existing configuration. Use " +
-      "describe_modulator instead to check whether a configured modulator is working.",
+    title: T.analyze_audio.title,
+    description: T.analyze_audio.description,
     inputSchema: {
       window_ms: z
         .number()
         .int()
         .positive()
         .optional()
-        .describe("How far back to summarise, in milliseconds. Defaults to the full ~5900ms retained."),
+        .describe(T.analyze_audio.args.window_ms),
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async ({ window_ms }) => {
     try {
@@ -107,15 +136,10 @@ server.registerTool(
 server.registerTool(
   "list_outputs",
   {
-    title: "List OSC outputs and modulators",
-    description:
-      "List every configured OSC destination and the modulators on it, with each modulator's OSC " +
-      "path, source stem and shaping settings. Call this to see the current configuration before " +
-      "changing anything, and to find the output and modulator ids that the other tools need. " +
-      "Modulators with no OSC path are flagged - they process audio but transmit nothing, and " +
-      "AudioSlice reports no error for that.",
+    title: T.list_outputs.title,
+    description: T.list_outputs.description,
     inputSchema: {},
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async () => {
     try {
@@ -130,20 +154,14 @@ server.registerTool(
 server.registerTool(
   "describe_modulator",
   {
-    title: "Check whether a modulator is working",
-    description:
-      "Report what one modulator is actually emitting over a recent window: how many times it " +
-      "fired, its peak and average, and its instantaneous value. Call this to verify a modulator " +
-      "after creating or changing it, or when the user says a specific thing is not working. " +
-      "For beat and onset sources, judge by how many times it fired, NOT by the instantaneous " +
-      "value - those signals are non-zero for roughly one frame in 86, so an instantaneous read " +
-      "is almost always zero even when the modulator is working perfectly.",
+    title: T.describe_modulator.title,
+    description: T.describe_modulator.description,
     inputSchema: {
-      output_id: z.number().int().describe("Output id, from list_outputs."),
-      modulator_id: z.number().int().describe("Modulator id, from list_outputs."),
-      window_ms: z.number().int().positive().optional().describe("Window in ms; defaults to ~5900."),
+      output_id: z.number().int().describe(T.describe_modulator.args.output_id),
+      modulator_id: z.number().int().describe(T.describe_modulator.args.modulator_id),
+      window_ms: z.number().int().positive().optional().describe(T.describe_modulator.args.window_ms),
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async ({ output_id, modulator_id, window_ms }) => {
     try {
@@ -156,22 +174,74 @@ server.registerTool(
   }
 );
 
+// --- documentation ----------------------------------------------------------
+// The product docs, vendored from the docs site at build time. get_api_schema
+// below answers "what is this field"; these answer "how does this work" and
+// "how do I wire it to Resolume" - which the field reference cannot.
+
+server.registerTool(
+  "search_docs",
+  {
+    title: T.search_docs.title,
+    description: T.search_docs.description,
+    inputSchema: {
+      query: z.string().describe(T.search_docs.args.query),
+      max_results: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .optional()
+        .describe(T.search_docs.args.max_results),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async ({ query, max_results }) => {
+    if (!docsAvailable) {
+      return fail(new Error(
+        "The bundled documentation is missing from this install. The other tools are unaffected."
+      ));
+    }
+    return text(formatDocHits(searchDocs(query, max_results || 5), query));
+  }
+);
+
+server.registerTool(
+  "read_doc",
+  {
+    title: T.read_doc.title,
+    description: T.read_doc.description,
+    inputSchema: {
+      page: DOC_PAGE.describe(T.read_doc.args.page),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async ({ page }) => {
+    if (!docsAvailable) {
+      return fail(new Error(
+        "The bundled documentation is missing from this install. The other tools are unaffected."
+      ));
+    }
+    const doc = readDoc(page);
+    if (!doc) {
+      return fail(new Error(`No page "${page}". Available: ${pageList().join(", ")}.`));
+    }
+    return text(doc.body);
+  }
+);
+
 server.registerTool(
   "get_api_schema",
   {
-    title: "AudioSlice field reference",
-    description:
-      "Fetch AudioSlice's own field-by-field reference for outputs, modulators, settings and " +
-      "tempo, straight from the running app. Call this when you need the exact meaning, units or " +
-      "valid range of a field before setting it, or when a setting did not behave as expected. " +
-      "It is authoritative for the installed version, so prefer it over assumptions.",
+    title: T.get_api_schema.title,
+    description: T.get_api_schema.description,
     inputSchema: {
       section: z
         .enum(["modulator", "output", "settings", "tempo", "signalSummary", "statistics", "all"])
         .optional()
-        .describe("Which field group to return. Defaults to modulator, the one most often needed."),
+        .describe(T.get_api_schema.args.section),
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async ({ section }) => {
     try {
@@ -194,25 +264,21 @@ server.registerTool(
 server.registerTool(
   "create_osc_output",
   {
-    title: "Create an OSC destination",
-    description:
-      "Create a new OSC destination (an IP and port to send to). Do this before creating " +
-      "modulators, since every modulator belongs to an output. Returns the new output's id. " +
-      "Note that changing configuration briefly interrupts OSC transmission, so avoid " +
-      "reconfiguring during a live performance.",
+    title: T.create_osc_output.title,
+    description: T.create_osc_output.description,
     inputSchema: {
-      name: z.string().describe("Display name, e.g. \"Resolume\" or \"stage left rig\"."),
-      ip: z.string().default("127.0.0.1").describe("Destination IP address."),
-      port: z.number().int().min(1).max(65535).describe("Destination UDP port."),
+      name: z.string().describe(T.create_osc_output.args.name),
+      ip: z.string().default("127.0.0.1").describe(T.create_osc_output.args.ip),
+      port: z.number().int().min(1).max(65535).describe(T.create_osc_output.args.port),
       send_interval_ms: z
         .number()
         .int()
         .min(1)
         .max(1000)
         .optional()
-        .describe("How often to transmit, in ms. Defaults to 11 (one engine frame, ~86/sec)."),
+        .describe(T.create_osc_output.args.send_interval_ms),
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false },
   },
   async ({ name, ip, port, send_interval_ms }) => {
     try {
@@ -233,52 +299,51 @@ server.registerTool(
 server.registerTool(
   "create_modulator",
   {
-    title: "Create a modulator",
-    description:
-      "Add a modulator to an output: it takes one data stream from one stem and sends it to an OSC " +
-      "address. The osc_path is what determines where data goes - a modulator without one processes " +
-      "audio and transmits nothing, silently. Check analyze_audio first to pick a stem that has " +
-      "signal and carries the stream you want; asking for a stream a stem does not have produces " +
-      "silence with no error. Verify the result with describe_modulator afterwards.",
+    title: T.create_modulator.title,
+    description: T.create_modulator.description,
     inputSchema: {
-      output_id: z.number().int().describe("Which output to add it to, from list_outputs."),
-      osc_path: z.string().describe("OSC address to send to, e.g. \"/composition/layers/1/video/opacity\"."),
-      stem: z.string().describe(`Source stem. One of: ${STEMS.join(", ")}.`),
+      output_id: z.number().int().describe(T.create_modulator.args.output_id),
+      osc_path: z.string().describe(T.create_modulator.args.osc_path),
+      stem: z.enum(STEMS).describe(T.create_modulator.args.stem),
       stream: z
-        .string()
+        .enum(Object.keys(STREAMS))
         .optional()
-        .describe(`Which data stream: ${Object.keys(STREAMS).join(", ")}. Defaults to energy.`),
-      name: z.string().optional().describe("Display label only - has no effect on output."),
-      range_min: z.number().optional().describe("Value sent when the stem level is 0. Default 0."),
-      range_max: z.number().optional().describe("Value sent when the stem level is 1. Default 1."),
+        .describe(T.create_modulator.args.stream),
+      name: z.string().optional().describe(T.create_modulator.args.name),
+      range_min: z.number().min(-10000).max(10000).optional().describe(T.create_modulator.args.range_min),
+      range_max: z.number().min(-10000).max(10000).optional().describe(T.create_modulator.args.range_max),
       smoothing_ms: z
         .number()
+        .min(0)
+        .max(10000)
         .optional()
-        .describe("Smoothing time in ms. 0 or omitted means none. Higher is smoother but laggier."),
+        .describe(T.create_modulator.args.smoothing_ms),
+      threshold: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .describe(T.create_modulator.args.threshold),
       fire_every_beats: z
         .number()
         .int()
         .min(1)
         .max(256)
         .optional()
-        .describe("For beat sources: fire only every nth beat. 4 = once a bar in 4/4."),
+        .describe(T.create_modulator.args.fire_every_beats),
       beat_offset_frames: z
         .number()
         .int()
         .min(0)
         .max(64)
         .optional()
-        .describe(
-          "Delay this modulator's beat event by n frames (~11.6ms each) without changing which " +
-          "beats it fires on. Use it to stagger several modulators that share the same " +
-          "fire_every_beats so their packets leave separately rather than all at once."
-        ),
+        .describe(T.create_modulator.args.beat_offset_frames),
       switch_mode: z
         .boolean()
         .optional()
-        .describe("Send a single integer 1 per event instead of a continuous level. For Resolume-style triggers."),
+        .describe(T.create_modulator.args.switch_mode),
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false },
   },
   async (a) => {
     try {
@@ -292,6 +357,7 @@ server.registerTool(
       if (a.range_min !== undefined) body.rangeMin = a.range_min;
       if (a.range_max !== undefined) body.rangeMax = a.range_max;
       if (a.smoothing_ms !== undefined) body.alpha = msToAlpha(a.smoothing_ms);
+      if (a.threshold !== undefined) body.envThreshold = a.threshold;
       if (a.fire_every_beats !== undefined) body.beatModulo = a.fire_every_beats;
       if (a.beat_offset_frames !== undefined) body.beatPhaseOffsetFrames = a.beat_offset_frames;
       if (a.switch_mode !== undefined) body.switchMode = a.switch_mode;
@@ -310,29 +376,25 @@ server.registerTool(
 server.registerTool(
   "update_modulator",
   {
-    title: "Change a modulator",
-    description:
-      "Change settings on an existing modulator. Only the fields you pass are altered. Prefer one " +
-      "call that changes several fields over several calls changing one each - every change briefly " +
-      "interrupts OSC transmission, so a rapid series of edits is disruptive during a performance. " +
-      "Re-check with describe_modulator afterwards rather than assuming the change took effect, " +
-      "since the user may be editing the same modulator in the UI.",
+    title: T.update_modulator.title,
+    description: T.update_modulator.description,
     inputSchema: {
-      output_id: z.number().int(),
-      modulator_id: z.number().int(),
-      osc_path: z.string().optional().describe("New OSC address."),
-      enabled: z.boolean().optional(),
-      stem: z.string().optional().describe(`New source stem: ${STEMS.join(", ")}.`),
-      stream: z.string().optional().describe(`New stream: ${Object.keys(STREAMS).join(", ")}.`),
-      range_min: z.number().optional(),
-      range_max: z.number().optional(),
-      smoothing_ms: z.number().optional(),
-      fire_every_beats: z.number().int().min(1).max(256).optional(),
-      beat_offset_frames: z.number().int().min(0).max(64).optional(),
-      switch_mode: z.boolean().optional(),
-      invert: z.boolean().optional(),
+      output_id: z.number().int().describe(T.update_modulator.args.output_id),
+      modulator_id: z.number().int().describe(T.update_modulator.args.modulator_id),
+      osc_path: z.string().optional().describe(T.update_modulator.args.osc_path),
+      enabled: z.boolean().optional().describe(T.update_modulator.args.enabled),
+      stem: z.enum(STEMS).optional().describe(T.update_modulator.args.stem),
+      stream: z.enum(Object.keys(STREAMS)).optional().describe(T.update_modulator.args.stream),
+      range_min: z.number().min(-10000).max(10000).optional().describe(T.update_modulator.args.range_min),
+      range_max: z.number().min(-10000).max(10000).optional().describe(T.update_modulator.args.range_max),
+      smoothing_ms: z.number().min(0).max(10000).optional().describe(T.update_modulator.args.smoothing_ms),
+      threshold: z.number().min(0).max(1).optional().describe(T.update_modulator.args.threshold),
+      fire_every_beats: z.number().int().min(1).max(256).optional().describe(T.update_modulator.args.fire_every_beats),
+      beat_offset_frames: z.number().int().min(0).max(64).optional().describe(T.update_modulator.args.beat_offset_frames),
+      switch_mode: z.boolean().optional().describe(T.update_modulator.args.switch_mode),
+      invert: z.boolean().optional().describe(T.update_modulator.args.invert),
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
   },
   async (a) => {
     try {
@@ -344,6 +406,7 @@ server.registerTool(
       if (a.range_min !== undefined) body.rangeMin = a.range_min;
       if (a.range_max !== undefined) body.rangeMax = a.range_max;
       if (a.smoothing_ms !== undefined) body.alpha = msToAlpha(a.smoothing_ms);
+      if (a.threshold !== undefined) body.envThreshold = a.threshold;
       if (a.fire_every_beats !== undefined) body.beatModulo = a.fire_every_beats;
       if (a.beat_offset_frames !== undefined) body.beatPhaseOffsetFrames = a.beat_offset_frames;
       if (a.switch_mode !== undefined) body.switchMode = a.switch_mode;
@@ -361,13 +424,18 @@ server.registerTool(
 server.registerTool(
   "delete_modulator",
   {
-    title: "Delete a modulator",
-    description:
-      "Permanently remove a modulator from an output. This cannot be undone and the modulator stops " +
-      "transmitting immediately. Confirm with the user before calling it, and prefer setting " +
-      "enabled=false via update_modulator if they may want it back.",
-    inputSchema: { output_id: z.number().int(), modulator_id: z.number().int() },
-    annotations: { readOnlyHint: false, destructiveHint: true },
+    title: T.delete_modulator.title,
+    description: T.delete_modulator.description,
+    inputSchema: {
+      output_id: z.number().int().describe(T.delete_modulator.args.output_id),
+      modulator_id: z.number().int().describe(T.delete_modulator.args.modulator_id),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
+      idempotentHint: true,
+    },
   },
   async ({ output_id, modulator_id }) => {
     try {
@@ -382,13 +450,15 @@ server.registerTool(
 server.registerTool(
   "delete_output",
   {
-    title: "Delete an OSC output",
-    description:
-      "Permanently remove an OSC destination AND every modulator on it. This cannot be undone. " +
-      "Always confirm with the user first, and list_outputs beforehand so they know exactly what " +
-      "will be lost.",
-    inputSchema: { output_id: z.number().int() },
-    annotations: { readOnlyHint: false, destructiveHint: true },
+    title: T.delete_output.title,
+    description: T.delete_output.description,
+    inputSchema: { output_id: z.number().int().describe(T.delete_output.args.output_id) },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
+      idempotentHint: true,
+    },
   },
   async ({ output_id }) => {
     try {
@@ -403,22 +473,21 @@ server.registerTool(
 server.registerTool(
   "set_tempo",
   {
-    title: "Set the tempo source",
-    description:
-      "Change how AudioSlice determines tempo: track the incoming audio, run a fixed metronome, or " +
-      "sync to Ableton Link. Use the real-time tracker for live audio, and the metronome when there " +
-      "is no reliable beat to track. If tracker confidence from get_status is low, tempo_bias can " +
-      "steer it away from half-time or double-time readings.",
+    title: T.set_tempo.title,
+    description: T.set_tempo.description,
     inputSchema: {
-      clock: z.enum(["none", "tracker", "metronome", "ableton_link", "osc"]).optional(),
-      metronome_bpm: z.number().min(20).max(300).optional().describe("Fixed BPM, when clock=metronome."),
-      beats_per_bar: z.number().int().min(2).max(8).optional(),
+      clock: z
+        .enum(["none", "tracker", "metronome", "ableton_link", "osc"])
+        .optional()
+        .describe(T.set_tempo.args.clock),
+      metronome_bpm: z.number().min(20).max(300).optional().describe(T.set_tempo.args.metronome_bpm),
+      beats_per_bar: z.number().int().min(2).max(8).optional().describe(T.set_tempo.args.beats_per_bar),
       tempo_bias: z
         .enum(["neutral", "prefer_slower", "prefer_faster"])
         .optional()
-        .describe("Nudge the tracker when it locks to half or double the intended tempo."),
+        .describe(T.set_tempo.args.tempo_bias),
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
   },
   async (a) => {
     try {
@@ -441,14 +510,10 @@ server.registerTool(
 server.registerTool(
   "list_audio_devices",
   {
-    title: "List audio input devices",
-    description:
-      "List the audio input devices available on this machine and which one AudioSlice currently " +
-      "has open, with its sample rate and buffer size. Call this when AudioSlice reports it is not " +
-      "hearing audio, so you can offer the user the actual device names to try. Pair it with " +
-      "get_status: switch a device, then check whether the input level comes up.",
+    title: T.list_audio_devices.title,
+    description: T.list_audio_devices.description,
     inputSchema: {},
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async () => {
     try {
@@ -475,17 +540,13 @@ server.registerTool(
 server.registerTool(
   "select_audio_device",
   {
-    title: "Switch the audio input device",
-    description:
-      "Switch AudioSlice to a different audio input. Use the exact name from list_audio_devices. " +
-      "This briefly interrupts audio and OSC output while the device is reopened, so do not do it " +
-      "during a performance without asking. After switching, call get_status to confirm the input " +
-      "level actually came up - opening a device successfully does not mean sound is arriving on it.",
+    title: T.select_audio_device.title,
+    description: T.select_audio_device.description,
     inputSchema: {
-      name: z.string().describe("Exact device name from list_audio_devices."),
-      type: z.string().optional().describe("Driver type, e.g. CoreAudio. Usually unnecessary."),
+      name: z.string().describe(T.select_audio_device.args.name),
+      type: z.string().optional().describe(T.select_audio_device.args.type),
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
   },
   async ({ name, type }) => {
     try {
@@ -503,14 +564,10 @@ server.registerTool(
 server.registerTool(
   "tap_tempo",
   {
-    title: "Restart the beat grid",
-    description:
-      "Restart the beat cycle at this instant, exactly like the app's \"Tap for 1\" button. Every " +
-      "modulator set to fire every n beats re-anchors here, so a group that has drifted out of " +
-      "phase with the music lines up again. Use it when beat-driven output is landing on the wrong " +
-      "beat rather than not firing at all - if it is not firing, describe_modulator will show that.",
+    title: T.tap_tempo.title,
+    description: T.tap_tempo.description,
     inputSchema: {},
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false },
   },
   async () => {
     try {
@@ -525,12 +582,10 @@ server.registerTool(
 server.registerTool(
   "list_patches",
   {
-    title: "List saved patches",
-    description:
-      "List the saved AudioSlice configurations by name. Call this before load_patch so you can " +
-      "offer real names, and before save_patch so you do not silently overwrite one.",
+    title: T.list_patches.title,
+    description: T.list_patches.description,
     inputSchema: {},
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
   async () => {
     try {
@@ -546,17 +601,19 @@ server.registerTool(
 server.registerTool(
   "save_patch",
   {
-    title: "Save the current configuration",
-    description:
-      "Save the entire current configuration - every output and modulator - under a name, so it can " +
-      "be restored later. Worth doing before any substantial reconfiguration, so there is a way " +
-      "back. Saving over an existing name replaces it, so check list_patches first.",
+    title: T.save_patch.title,
+    description: T.save_patch.description,
     inputSchema: {
       name: z
         .string()
-        .describe("A name using letters, numbers, spaces, hyphens and underscores only (max 64)."),
+        .describe(T.save_patch.args.name),
     },
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: false,
+      idempotentHint: true,
+      destructiveHint: true,
+    },
   },
   async ({ name }) => {
     try {
@@ -571,15 +628,15 @@ server.registerTool(
 server.registerTool(
   "load_patch",
   {
-    title: "Load a saved configuration",
-    description:
-      "DESTRUCTIVE: replace the ENTIRE current configuration with a saved patch. Every existing " +
-      "output and modulator is torn down and rebuilt, and anything not saved is lost. Always " +
-      "confirm with the user first, and offer to save_patch the current state before proceeding. " +
-      "Never call this during a live performance without explicit agreement - it interrupts all " +
-      "output while the rebuild happens.",
+    title: T.load_patch.title,
+    description: T.load_patch.description,
     inputSchema: { name: z.string().describe("Patch name from list_patches.") },
-    annotations: { readOnlyHint: false, destructiveHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
+      idempotentHint: true,
+    },
   },
   async ({ name }) => {
     try {
@@ -594,14 +651,10 @@ server.registerTool(
 server.registerTool(
   "set_audioslice_token",
   {
-    title: "Save the AudioSlice API token",
-    description:
-      "Store the API token so this extension can talk to AudioSlice. Only needed if AudioSlice has " +
-      "a token configured - by default it does not, and everything works with no setup. Call this " +
-      "when a tool reports a 401, after asking the user to copy the token from AudioSlice's " +
-      "Advanced settings. It is saved locally and reused in future conversations.",
+    title: T.set_audioslice_token.title,
+    description: T.set_audioslice_token.description,
     inputSchema: { token: z.string().describe("The token from AudioSlice > Advanced settings.") },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
   },
   async ({ token }) => {
     try {
@@ -624,8 +677,8 @@ server.registerTool(
 server.registerPrompt(
   "what_can_i_do",
   {
-    title: "What can I do with this track?",
-    description: "Analyse what is playing and suggest what to drive with it.",
+    title: PROMPTS.what_can_i_do.title,
+    description: PROMPTS.what_can_i_do.description,
   },
   () => ({
     messages: [{
@@ -636,7 +689,9 @@ server.registerPrompt(
           "Check AudioSlice's status, then analyse what is currently playing. Tell me which stems " +
           "have strong, usable signal and which are too quiet or too static to be worth using. " +
           "Then suggest two or three concrete things I could drive with them, saying which stem " +
-          "and stream you would use for each and why.",
+          "and stream you would use for each and why. Consult the bundled documentation with " +
+          "search_docs for what each stream is suited to, rather than assuming - it carries a " +
+          "source-by-signal matrix and notes on which stems extract reliably.",
       },
     }],
   })
@@ -645,8 +700,8 @@ server.registerPrompt(
 server.registerPrompt(
   "setup_beat_lighting",
   {
-    title: "Set up beat-synced lighting",
-    description: "Create beat-driven OSC triggers, staggered so they do not collide.",
+    title: PROMPTS.setup_beat_lighting.title,
+    description: PROMPTS.setup_beat_lighting.description,
   },
   () => ({
     messages: [{
@@ -657,7 +712,9 @@ server.registerPrompt(
           "Help me set up beat-synced triggers. First check the status and confirm the tempo looks " +
           "right. Ask me what I am sending to and on which address, then create the modulators. " +
           "If we end up with several firing on the same beat, stagger them a frame apart so their " +
-          "packets do not all leave at once. Verify each one is actually firing when we are done.",
+          "packets do not all leave at once. Verify each one is actually firing when we are done. " +
+          "If I want the triggers shaped over time rather than firing instantaneously, read the " +
+          "envelope-creator documentation with read_doc before setting the envelope up.",
       },
     }],
   })
@@ -666,8 +723,8 @@ server.registerPrompt(
 server.registerPrompt(
   "debug_no_output",
   {
-    title: "Why isn't my OSC arriving?",
-    description: "Work through why a receiver is showing nothing.",
+    title: PROMPTS.debug_no_output.title,
+    description: PROMPTS.debug_no_output.description,
   },
   () => ({
     messages: [{
@@ -679,7 +736,9 @@ server.registerPrompt(
           "AudioSlice is running and hearing audio, whether it is actually transmitting and to " +
           "where, and whether each modulator is producing a signal and has an OSC path set. Then " +
           "tell me specifically which link in the chain is broken rather than listing everything " +
-          "you checked.",
+          "you checked. If it turns out to be something the receiving application has to be told " +
+          "to do, check the documentation for that application with search_docs - Resolume, " +
+          "TouchDesigner and Synesthesia each need OSC input enabled in their own way.",
       },
     }],
   })
@@ -688,8 +747,8 @@ server.registerPrompt(
 server.registerPrompt(
   "review_setup",
   {
-    title: "Review my current setup",
-    description: "Audit the existing configuration for problems.",
+    title: PROMPTS.review_setup.title,
+    description: PROMPTS.review_setup.description,
   },
   () => ({
     messages: [{
@@ -701,6 +760,32 @@ server.registerPrompt(
           "wrong or wasteful: modulators with no OSC path, ones that are not producing any signal, " +
           "stems that are silent, streams selected that the stem does not carry, or several " +
           "modulators fighting over the same OSC address. Be specific about what to change.",
+      },
+    }],
+  })
+);
+
+// Worth its own starter now that the integration guides ship with the server:
+// getting OSC into Resolume or TouchDesigner is where people get stuck, and it is
+// the one part of the chain AudioSlice cannot inspect for them.
+server.registerPrompt(
+  "connect_visuals_app",
+  {
+    title: PROMPTS.connect_visuals_app.title,
+    description: PROMPTS.connect_visuals_app.description,
+  },
+  () => ({
+    messages: [{
+      role: "user",
+      content: {
+        type: "text",
+        text:
+          "Help me get AudioSlice driving my visuals application. Ask me which one I am using, " +
+          "then read its setup guide with read_doc and follow it - the receiving side usually has " +
+          "to be told to listen for OSC before anything arrives, and each application does that " +
+          "differently. Create the output and a modulator or two to prove the link works, then " +
+          "verify they are actually firing. Tell me what I need to do on the receiving end, since " +
+          "you cannot do that part for me.",
       },
     }],
   })

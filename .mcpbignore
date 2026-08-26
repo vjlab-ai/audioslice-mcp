@@ -1,7 +1,7 @@
 test-e2e.mjs
 test-workflow.mjs
 test-all-tools.mjs
-publish.sh
+*.webp
 *.mcpb
 .mcpbignore
 .github/

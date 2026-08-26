@@ -2,9 +2,9 @@
   "manifest_version": "0.1",
   "name": "audioslice",
   "display_name": "AudioSlice",
-  "version": "0.1.0",
-  "description": "Set up and diagnose AudioSlice's audio-reactive OSC output from a conversation.",
-  "long_description": "Connects Claude to a running AudioSlice so you can ask what a track can drive, build OSC modulators for it, and work out why a receiver is showing nothing. Talks only to AudioSlice on your own machine over localhost, and makes no other network connections - the documentation it uses is bundled, so it behaves the same with or without an internet connection.",
+  "version": "0.3.0",
+  "description": "Set up and diagnose AudioSlice, an advanced realtime audio analyzer for realtime visuals and VJing",
+  "long_description": "Connects Claude to a running AudioSlice so you can ask what a track can drive, build OSC modulators for it, and fix OSC networking issues.",
   "author": {
     "name": "VJLab.ai",
     "url": "https://vjlab.ai"

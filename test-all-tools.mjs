@@ -46,6 +46,12 @@ try {
   await call("list_outputs");
   await call("get_api_schema", { section: "modulator" });
   await call("get_api_schema", { section: "all" });
+  // Docs are vendored, so these are the one pair of tools that work with
+  // AudioSlice closed - worth covering both the hit and the miss.
+  await call("search_docs", { query: "onset threshold" });
+  await call("search_docs", { query: "resolume osc setup", max_results: 2 });
+  await call("read_doc", { page: "modulators" });
+  await call("read_doc", { page: "no-such-page" }, { expectError: true });
   const devices = await call("list_audio_devices");
   await call("list_patches");
 
