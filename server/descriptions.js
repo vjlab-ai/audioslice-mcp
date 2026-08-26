@@ -21,6 +21,11 @@ export const TOOLS = {
       "receiver is not listening. Also call it before configuring anything, so you know the " +
       "tempo and whether there is signal to work with. " +
       "\n\n" +
+            "\n\n" +
+      "Raise a performance concern only when this says FALLING BEHIND, which is measured. Nothing " +
+      "here reports CPU or memory. AudioSlice runs entirely on the CPU and does not use the GPU; " +
+      "if someone asks what it is costing them, say that and point them at Activity Monitor on " +
+      "macOS or Task Manager on Windows, which measures it properly. " +
       "Docs note: AudioSlice needs clean audio from an application or an interface - microphone " +
       "input is explicitly not supported yet, so \"hearing nothing\" on a mic is expected rather " +
       "than broken. On macOS routing system audio needs a virtual device (BlackHole or " +

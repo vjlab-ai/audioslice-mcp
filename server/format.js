@@ -32,7 +32,7 @@ export function formatStatus(state) {
 
   lines.push(
     e.modelKeepingUp
-      ? `Engine: keeping up (inference ${f2(e.splitterTimeMs)}ms of a ${f2(e.frameIntervalMs)}ms budget).`
+      ? `Engine: keeping up.`
       : `Engine: FALLING BEHIND - inference is taking ${f2(e.splitterTimeMs)}ms against a ` +
         `${f2(e.frameIntervalMs)}ms frame. Frames are being dropped, which shows up as erratic, ` +
         `stuttering modulator output. Close other heavy apps or reduce the workload.`

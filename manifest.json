@@ -2,7 +2,7 @@
   "manifest_version": "0.1",
   "name": "audioslice",
   "display_name": "AudioSlice",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Set up and diagnose AudioSlice, an advanced realtime audio analyzer for realtime visuals and VJing",
   "long_description": "Connects Claude to a running AudioSlice so you can ask what a track can drive, build OSC modulators for it, and fix OSC networking issues.",
   "author": {

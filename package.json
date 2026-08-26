@@ -1,6 +1,6 @@
 {
   "name": "audioslice-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server for AudioSlice - drive and diagnose audio-reactive OSC output from Claude.",
   "type": "module",
   "main": "server/index.js",
