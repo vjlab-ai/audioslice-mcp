@@ -1,7 +1,9 @@
 # AudioSlice MCP server
 
-Connects Claude to a running AudioSlice, so you can ask what a track can drive,
+Connects Claude to a running [AudioSlice](https://vjlab.ai/docs/), so you can ask what a track can drive,
 build OSC modulators for it, and work out why a receiver is showing nothing.
+
+Read more about using the MCP in the [documentation](https://vjlab.ai/docs/audioslice/mcp).
 
 ![AudioSlice outputs](screenshot.webp)
 
