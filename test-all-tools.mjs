@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// A short file in the repo, played muted so the test makes no sound.
+const TEST_WAV = join(HERE, "..", "tests", "model_test.wav");
 const transport = new StdioClientTransport({
   command: process.execPath, args: [join(HERE, "server", "index.js")],
 });
@@ -95,8 +97,15 @@ try {
 
   // ---- tempo ---------------------------------------------------------------
   await call("set_tempo", { clock: "metronome", metronome_bpm: 128, beats_per_bar: 4 });
-  await call("set_tempo", { tempo_bias: "prefer_faster" });
+  await call("set_tempo", { tempo_bias: "prefer_faster", responsiveness: 0.5 });
   await call("tap_tempo");
+  await call("reset_model");
+
+  // ---- file playback ---------------------------------------------------------
+  await call("play_file", { path: TEST_WAV, mute: true, start_s: 1, end_s: 4 });
+  await call("stop_file");
+  await call("stop_file", {}, { expectError: true });            // nothing playing now
+  await call("play_file", { path: "/no/such/file.wav" }, { expectError: true });
 
   // ---- devices -------------------------------------------------------------
   const alt = devices.split("\n")

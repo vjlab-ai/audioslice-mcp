@@ -16,6 +16,8 @@ import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRATCH_PATCH = "integration test backup";
+// A short file in the repo, played muted so the test makes no sound.
+const TEST_WAV = join(HERE, "..", "tests", "model_test.wav");
 const SCRATCH_OSC_PATH = "/integration/test";
 
 const transport = new StdioClientTransport({
@@ -104,6 +106,8 @@ try {
   await call("search_docs", { query: "x", max_results: 99 }, { expect: "error" });
   await call("create_modulator", { output_id: 0, osc_path: "/x", stem: "not_a_stem" }, { expect: "error" });
   await call("set_tempo", { metronome_bpm: 9999 }, { expect: "error" });
+  await call("set_tempo", { responsiveness: 2 }, { expect: "error" });
+  await call("play_file", { path: TEST_WAV, start_s: -1 }, { expect: "error" });
   await call("describe_modulator", { output_id: 99999, modulator_id: 1 }, { expect: "error" });
   await call("select_audio_device", { name: "No Such Device" }, { expect: "error" });
 
@@ -175,9 +179,16 @@ try {
   // --- tempo, devices, token ------------------------------------------------
   console.log("\ntempo / devices / token");
   await call("set_tempo", { clock: "metronome", metronome_bpm: 128, beats_per_bar: 4 });
-  await call("set_tempo", { tempo_bias: "prefer_faster" });
+  await call("set_tempo", { tempo_bias: "prefer_faster", responsiveness: 0.5 });
   await call("set_tempo", { clock: "tracker", tempo_bias: "neutral" });
   await call("tap_tempo");
+  await call("reset_model");
+
+  // File playback: muted, a few seconds in, then back to live input.
+  await call("play_file", { path: TEST_WAV, mute: true, start_s: 2, end_s: 5 });
+  await call("stop_file");
+  await call("stop_file", {}, { expect: "error" });
+  await call("play_file", { path: "/no/such/file.wav", mute: true }, { expect: "error" });
 
   // Only ever re-select the device that is already open. Switching someone's audio
   // device from a test would be a real change to their machine, not a test fixture.

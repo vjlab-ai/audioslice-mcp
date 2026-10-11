@@ -13,7 +13,7 @@ Here's a quick reference of the availiable signals:
 | &nbsp;&nbsp;&nbsp;&nbsp;**Snare** | 🔵 | 🔴 | 🟡 | 🟣 | — | High |
 | &nbsp;&nbsp;&nbsp;&nbsp;**Hi-hat** | 🔵 | 🔴 | 🟡 | 🟣 | — | High |
 | &nbsp;&nbsp;&nbsp;&nbsp;**Tom** | 🔵 | 🔴 | 🟡 | 🟣 | — | Moderate |
-| &nbsp;&nbsp;&nbsp;&nbsp;**Percussion** | 🔵 | 🔴 | 🟡 | 🟣 | — | Moderate |
+| &nbsp;&nbsp;&nbsp;&nbsp;**Percussion** | 🔵 | 🔴 | 🟡 | 🟣 | — | Low |
 | **Entire Mix** | 🔵 | 🔴 | — | — | — | High |
 | **Vocals** | 🔵 | — | 🟡 | 🟣 | 🟢 | High |
 | **Bass** | 🔵 | — | — | — | 🟢 | High |
@@ -23,7 +23,7 @@ Here's a quick reference of the availiable signals:
 
 The magic of AudioSlice is that the neural net at the heart of the engine adapts to almost any genre, BPM, or style you can throw at it.
 
-**This differs significantly from most FFT-based trigger systems, which simply use FFT-magnitude (highly weighted towards low frequencies), and require constant fiddling with thresholds and filter cutoffs as genres, BPMs, and songs change.**
+🏆 **This differs significantly from most FFT-based trigger systems, which simply use FFT-magnitude (highly weighted towards low frequencies), and require constant fiddling with thresholds and filter cutoffs as genres, BPMs, and songs change.**
 
 ## Creating a new modulator
 
@@ -119,11 +119,19 @@ Or perhaps the most useful, trigger single beat events (`Switch` mode `ON` again
 
 ![](/modulators/beat_every_8.webp)
 
-While AudioSlice can detect downbeats (1 vs 2, 3, 4), if you'd like your `N` beats to "start" at a particular point, you can use the `Tap for 1` button to sync your phrase starts:
+While AudioSlice can detect downbeats (1 vs 2, 3, 4), if you'd like your `N` beats to "start" at a particular point, you can use the `Tap` button to sync your phrase starts:
 
 ![](/modulators/tap_for_one.webp)
 
 Later models will do phrase change detection, but for now this offset is a little manual. 
+
+#### Beat triggers `N` *times* every beat (Beat Divisions)
+
+Kind of the inverse of the above. You can trigger sub-beat firings, for instance to fire on every 16th note, but only every 4 notes:
+
+![](/modulators/beat_divisions.webp)
+
+We got this feature request a lot from laser operators. 
 
 #### Beat offsets: a sneaky feature
 
@@ -146,7 +154,7 @@ You can also create "ramps" which go up or down over the course of `N` beats:
 
 ![](/modulators/beat_ramp.webp)
 
-While AudioSlice can detect downbeats (1 vs 2, 3, 4), if you'd like your beat ramp to "start" at a particular point, you can use the `Tap for 1` button to sync your phrase starts:
+While AudioSlice can detect downbeats (1 vs 2, 3, 4), if you'd like your beat ramp to "start" at a particular point, you can use the `spacebar` key to sync your phrase starts:
 
 ![](/modulators/tap_for_one.webp)
 

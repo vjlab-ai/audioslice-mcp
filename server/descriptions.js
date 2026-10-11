@@ -19,7 +19,9 @@ export const TOOLS = {
       "something not working - it distinguishes the four failure modes that look identical from " +
       "the outside: not running, not hearing audio, not sending, or sending fine but the " +
       "receiver is not listening. Also call it before configuring anything, so you know the " +
-      "tempo and whether there is signal to work with. " +
+      "tempo and whether there is signal to work with. It also reports the license - retail, " +
+      "beta or trial, with days remaining - so call it when asked about the license or trial. An " +
+      "expired beta or trial disables all output, which looks exactly like not sending. " +
       "\n\n" +
             "\n\n" +
       "Raise a performance concern only when this says FALLING BEHIND, which is measured. Nothing " +
@@ -287,8 +289,10 @@ export const TOOLS = {
       "audio with no tapping, click track or timecode, and follows changes live. Give it a bar " +
       "or two to settle on a new track - sparse intros and ambient passages have less to lock " +
       "onto than a four-on-the-floor groove, so a wrong reading during an intro is not " +
-      "necessarily a fault. Set tempo_bias only when the material genuinely skews slow or fast " +
-      "(hip hop versus drum & bass). Ableton Link works in both directions and negotiates " +
+      "necessarily a fault. AudioSlice usually picks half or double time right by genre; " +
+      "tempo_bias is for when the user prefers the other feel, like the app's 1 and 2 keys: 1 " +
+      "halves the tempo when it's 160 BPM or faster (174 → 87); 2 doubles it when it's 90 BPM " +
+      "or slower (87 → 174). Ableton Link works in both directions and negotiates " +
       "automatically, so AudioSlice can drive Live or follow it. read_doc tempo for the detail.",
     args: {
       clock:
@@ -300,7 +304,14 @@ export const TOOLS = {
       metronome_bpm:
         "Fixed BPM, when clock=metronome.",
       tempo_bias:
-        "Nudge the tracker when it locks to half or double the intended tempo.",
+        "Nudge the tracker when it locks to half or double the intended tempo, like the 1 and 2 " +
+        "keys in the app. prefer_slower halves the tempo when it's 160 BPM or faster (174 → 87); " +
+        "prefer_faster doubles it when it's 90 BPM or slower (87 → 174). Between those, neither " +
+        "changes anything.",
+      responsiveness:
+        "How quickly the beat grid follows a tempo change, 0 to 1. 0 rides steadily through " +
+        "breaks and suits live performance; 1 adopts a new tempo within a few seconds and suits " +
+        "auditioning tracks at unrelated tempos. Affects the tracker and OSC clock sources only.",
     },
   },
   list_audio_devices: {
@@ -340,7 +351,7 @@ export const TOOLS = {
   tap_tempo: {
     title: "Restart the beat grid",
     description:
-      "Restart the beat cycle at this instant, exactly like the app's \"Tap for 1\" button. Every " +
+      "Restart the beat cycle at this instant, exactly like the app's \"Tap\" button. Every " +
       "modulator set to fire every n beats re-anchors here, so a group that has drifted out of " +
       "phase with the music lines up again. Use it when beat-driven output is landing on the " +
       "wrong beat rather than not firing at all - if it is not firing, describe_modulator will " +
@@ -348,6 +359,41 @@ export const TOOLS = {
       "\n\n" +
       "Docs note: this also restarts the beat-modulo cycle for every modulator counting beats, " +
       "so modulators set to fire every n beats begin their cycle from the tap.",
+  },
+  reset_model: {
+    title: "Reset the beat tracker",
+    description:
+      "Clear what AudioSlice has learned from the audio so far, exactly like pressing 0 in the " +
+      "app, so tracking re-locks from the music that follows. Use it when the tracked tempo or " +
+      "phase is wrong and stays wrong, for example right after a hard cut to a track at a very " +
+      "different tempo. If the tempo is right but beat-driven output lands on the wrong beat, " +
+      "use tap_tempo instead; if the tracker keeps choosing half or double time, set_tempo " +
+      "tempo_bias is the fix, not a reset. " +
+      "\n\n" +
+      "Docs note: the docs describe this as the 0 key on the Tempo page. read_doc tempo.",
+  },
+  play_file: {
+    title: "Play an audio file into AudioSlice",
+    description:
+      "Make AudioSlice analyse an audio file instead of its live input: the file plays in real " +
+      "time through the computer's default output (or silently with mute) and every stem, beat " +
+      "and modulator responds as if it were arriving live. The input device is ignored until the " +
+      "file ends or stop_file is called, then live input resumes. Use it to test tracking or a " +
+      "modulator against a known recording, or to compare settings on the same music; to change " +
+      "which live input AudioSlice listens to, use select_audio_device instead. It replaces " +
+      "whatever is playing into AudioSlice, so do not use it during a performance without asking.",
+    args: {
+      path: "Full path to a WAV, AIFF or FLAC file on this computer.",
+      mute: "Analyse without sound: the output device plays silence. Default false.",
+      start_s: "Where in the file to start, in seconds. Default 0.",
+      end_s: "Where to stop, in seconds. Default: the end of the file.",
+    },
+  },
+  stop_file: {
+    title: "Stop playing a file into AudioSlice",
+    description:
+      "Stop a file started with play_file and go back to the live audio input. Fails if no file " +
+      "is playing.",
   },
   list_patches: {
     title: "List saved patches",

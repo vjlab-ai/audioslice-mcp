@@ -59,6 +59,15 @@ export function formatStatus(state) {
       lines.push(`  [${id}] ${o.name}: ${verdict}`);
     }
   }
+  const lic = state.license;
+  if (lic) {
+    lines.push(lic.type === "retail"
+      ? `License: retail.`
+      : lic.expired
+        ? `License: ${lic.type} EXPIRED - output (OSC, DMX, MIDI, Pixelblaze) is disabled until a ` +
+          `newer build or a purchase.`
+        : `License: ${lic.type}, ${lic.daysRemaining ?? "unknown"} day(s) remaining.`);
+  }
   return lines.join("\n");
 }
 

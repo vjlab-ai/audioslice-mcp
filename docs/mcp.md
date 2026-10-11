@@ -5,7 +5,9 @@ Running, configuring, troubleshooting, and debugging AudioSlice using an AI like
 ## Installing the MCP
 
 1. Download the MCP from [Github](https://github.com/vjlab-ai/audioslice-mcp).
-2. Double click the .mcpb file to install it, accept the permissions
+2. Install the `.mcpb`
+    - For macOS: Double click the .mcpb file to install it, accept the permissions
+    - For Windows: in Claude Desktop, `Settings > Extensions > Advanced Settings > Install Extension > select .mcpb file`
 3. Open Claude or another local chatbot
 4. Open AudioSlice app, play some music
 5. Ask your chatbot if AudioSlice is configured correctly!

@@ -14,6 +14,8 @@ Focus on how your visuals will look and perform with parameters, scenes, clips, 
 
 AudioSlice is cross platform (Mac and Windows) and needs a clean audio connection (not a mic), but requires no other integrations or software: no ShowKontrol, no ProDJ link, no Ableton Link, nothing. Just pure audio in, OSC out, every 11 ms.  
 
+See our tutorials [here](https://www.youtube.com/@its-drevo)!
+
 ## AudioSlice supported signals
 
 Each kind of stem output can output multiple types of signals, like loudness, onsets, pan, pitch and spread, depending on the signal type. 
@@ -29,7 +31,7 @@ Onsets are events and only fire on changes, all other signals are continuous and
 | &nbsp;&nbsp;&nbsp;&nbsp;**Snare** | 🔵 | 🔴 | 🟡 | 🟣 | — | High |
 | &nbsp;&nbsp;&nbsp;&nbsp;**Hi-hat** | 🔵 | 🔴 | 🟡 | 🟣 | — | High |
 | &nbsp;&nbsp;&nbsp;&nbsp;**Tom** | 🔵 | 🔴 | 🟡 | 🟣 | — | Moderate |
-| &nbsp;&nbsp;&nbsp;&nbsp;**Percussion** | 🔵 | 🔴 | 🟡 | 🟣 | — | Moderate |
+| &nbsp;&nbsp;&nbsp;&nbsp;**Percussion** | 🔵 | 🔴 | 🟡 | 🟣 | — | Low |
 | **Entire Mix** | 🔵 | 🔴 | — | — | — | High |
 | **Vocals** | 🔵 | — | 🟡 | 🟣 | 🟢 | High |
 | **Bass** | 🔵 | — | — | — | 🟢 | High |

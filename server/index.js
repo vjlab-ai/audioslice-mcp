@@ -486,6 +486,7 @@ server.registerTool(
         .enum(["neutral", "prefer_slower", "prefer_faster"])
         .optional()
         .describe(T.set_tempo.args.tempo_bias),
+      responsiveness: z.number().min(0).max(1).optional().describe(T.set_tempo.args.responsiveness),
     },
     annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
   },
@@ -496,8 +497,8 @@ server.registerTool(
       const body = {};
       if (a.clock) body.clockSource = CLOCK[a.clock];
       if (a.metronome_bpm !== undefined) body.metronomeTempo = a.metronome_bpm;
-      if (a.beats_per_bar !== undefined) body.beatsPerBar = a.beats_per_bar;
       if (a.tempo_bias) body.tempoBias = BIAS[a.tempo_bias];
+      if (a.responsiveness !== undefined) body.responsiveness = a.responsiveness;
       if (Object.keys(body).length === 0) return text("Nothing to change - no fields were supplied.");
       await client.write("PUT", "/tempo", body);
       return text(`Tempo settings updated: ${Object.keys(body).join(", ")}.`);
@@ -573,6 +574,74 @@ server.registerTool(
     try {
       await client.write("POST", "/tempo/tap");
       return text("Beat grid restarted. All 'fire every n beats' cycles now count from this moment.");
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "reset_model",
+  {
+    title: T.reset_model.title,
+    description: T.reset_model.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: false, openWorldHint: false },
+  },
+  async () => {
+    try {
+      await client.write("POST", "/model/reset");
+      return text(
+        "Beat tracker reset. Tracking re-locks from the audio that follows - give it a bar or two, " +
+        "then check get_status."
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "play_file",
+  {
+    title: T.play_file.title,
+    description: T.play_file.description,
+    inputSchema: {
+      path: z.string().min(1).describe(T.play_file.args.path),
+      mute: z.boolean().optional().describe(T.play_file.args.mute),
+      start_s: z.number().min(0).optional().describe(T.play_file.args.start_s),
+      end_s: z.number().positive().optional().describe(T.play_file.args.end_s),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false },
+  },
+  async ({ path, mute, start_s, end_s }) => {
+    try {
+      const body = { path, mute: mute === true };
+      if (start_s !== undefined) body.start_s = start_s;
+      if (end_s !== undefined) body.end_s = end_s;
+      await client.write("POST", "/player/play", body);
+      return text(
+        `Playing ${path}${mute ? " (muted)" : ""} as AudioSlice's input. Live input resumes when it ` +
+        `ends or on stop_file. Give tracking a bar or two, then check get_status.`
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "stop_file",
+  {
+    title: T.stop_file.title,
+    description: T.stop_file.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: false, openWorldHint: false },
+  },
+  async () => {
+    try {
+      await client.write("POST", "/player/stop");
+      return text("File playback stopped; AudioSlice is back on its live input.");
     } catch (e) {
       return fail(e);
     }
