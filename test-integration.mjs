@@ -13,12 +13,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { AudioSliceClient } from "./server/client.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRATCH_PATCH = "integration test backup";
 // A short file in the repo, played muted so the test makes no sound.
 const TEST_WAV = join(HERE, "..", "tests", "model_test.wav");
 const SCRATCH_OSC_PATH = "/integration/test";
+const http = new AudioSliceClient();
 
 const transport = new StdioClientTransport({
   command: process.execPath,
@@ -73,6 +75,8 @@ console.log(`\nMCP integration test — ${tools.length} tools, ${prompts.length}
 let outputId = null;
 let modId = null;
 let restored = false;
+let origBlackout = false;
+let origMidi = null;
 
 try {
   // --- read-only ------------------------------------------------------------
@@ -83,6 +87,21 @@ try {
   await call("list_outputs");
   await call("list_patches");
   await call("list_audio_devices");
+  const blackoutStatus = await call("get_blackout");
+  origBlackout = blackoutStatus.includes("Blackout is ON");
+  origMidi = await http.get("/midi");
+  await call("list_midi_devices");
+  await call("get_midi_bindings");
+
+  // Licensing. A Debug build has licensing off (each tool says so); with a license, the last
+  // three have AudioSlice ask VJ Lab, so they need the internet.
+  const license = await http.get("/license");
+  const lic = await call("get_license_status");
+  record("get_license_status names the license state",
+    license.state === "unmanaged" ? /Licensing is off/.test(lic) : /OSC output:/.test(lic), lic);
+  await call("get_account");
+  await call("check_for_updates");
+  await call("refresh_license");
 
   // Every documentation page, and every schema section: these are enums, so the
   // cheap thing to do is cover the whole set rather than one representative.
@@ -107,9 +126,20 @@ try {
   await call("create_modulator", { output_id: 0, osc_path: "/x", stem: "not_a_stem" }, { expect: "error" });
   await call("set_tempo", { metronome_bpm: 9999 }, { expect: "error" });
   await call("set_tempo", { responsiveness: 2 }, { expect: "error" });
+  await call("set_tempo", { beats_per_bar: 1 }, { expect: "error" });
+  await call("set_tempo", { beats_per_bar: 9 }, { expect: "error" });
+  await call("set_tempo", { disable_downbeat_detection: "true" }, { expect: "error" });
   await call("play_file", { path: TEST_WAV, start_s: -1 }, { expect: "error" });
   await call("describe_modulator", { output_id: 99999, modulator_id: 1 }, { expect: "error" });
   await call("select_audio_device", { name: "No Such Device" }, { expect: "error" });
+  await call("set_blackout", { enabled: "not_a_bool" }, { expect: "error" });
+  await call("set_midi_enabled", { enabled: "not_a_bool" }, { expect: "error" });
+  await call("select_midi_device", {}, { expect: "error" });
+  await call("select_midi_device", { name: "No Such MIDI Device", identifier: "no-such-id" }, { expect: "error" });
+  await call("set_midi_binding", { function: "noSuchFunction", note: 60 }, { expect: "error" });
+  await call("set_midi_binding", { function: "tapTempo", channel: 17, note: 60 }, { expect: "error" });
+  await call("set_midi_binding", { function: "tapTempo", note: 60, cc: 64 }, { expect: "error" });
+  await call("set_midi_binding", { function: "tapTempo", note: "NotANote" }, { expect: "error" });
 
   // --- back up before touching anything -------------------------------------
   console.log("\nbacking up the live configuration");
@@ -140,6 +170,7 @@ try {
       range_max: 1,
       smoothing_ms: 0,
       fire_every_beats: 1,
+      fire_first: true,
       beat_offset_frames: 0,
       switch_mode: true,
     };
@@ -164,12 +195,34 @@ try {
         range_max: 127,
         smoothing_ms: 20,
         fire_every_beats: 2,
+        fire_first: false,
         beat_offset_frames: 1,
         switch_mode: false,
         invert: false,
       };
       if (schemaOf.update_modulator?.threshold) updateArgs.threshold = 0.2;
       await call("update_modulator", updateArgs);
+
+      // GET /outputs keys outputs and modulators by position ("0", "1", ...);
+      // the runtime ids are in each entry's `id` field.
+      const findModulator = (state) => {
+        const output = Object.values(state.outputs ?? {}).find((o) => o.id === outputId);
+        return Object.values(output?.modulators ?? {}).find((m) => m.id === modId);
+      };
+
+      let updatedMod = findModulator(await http.get("/outputs"));
+      record(
+        "update_modulator(fire_first=false) sets beatCountOffset=0",
+        updatedMod?.beatCountOffset === 0,
+        JSON.stringify(updatedMod)
+      );
+      await call("update_modulator", { output_id: outputId, modulator_id: modId, fire_first: true });
+      updatedMod = findModulator(await http.get("/outputs"));
+      record(
+        "update_modulator(fire_first=true) sets beatCountOffset=1",
+        updatedMod?.beatCountOffset === 1,
+        JSON.stringify(updatedMod)
+      );
 
       await call("delete_modulator", { output_id: outputId, modulator_id: modId });
       modId = null;
@@ -178,11 +231,122 @@ try {
 
   // --- tempo, devices, token ------------------------------------------------
   console.log("\ntempo / devices / token");
+  async function checkTempo(label, expected) {
+    const actual = await http.get("/tempo");
+    record(label, Object.entries(expected).every(([key, value]) => actual[key] === value),
+      `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+
+  // Read back the engine state: a successful write alone cannot prove that
+  // an argument was forwarded or that the tracker enforced its meter limit.
+  const clocks = { none: 1, tracker: 2, metronome: 3, ableton_link: 4, osc: 5 };
+  for (const [clock, clockSource] of Object.entries(clocks)) {
+    for (const disable of [false, true]) {
+      for (const beats of [2, 8]) {
+        const expected = {
+          clockSource,
+          disableDownbeatDetection: disable,
+          beatsPerBar: clock === "tracker" && !disable ? 4 : beats,
+        };
+        const reply = await call("set_tempo", {
+          clock, disable_downbeat_detection: disable, beats_per_bar: beats,
+        });
+        await checkTempo(`MCP meter rules (${clock}, disable=${disable}, beats=${beats})`, expected);
+        record("set_tempo reports the applied meter", reply.includes(`beatsPerBar=${expected.beatsPerBar}`), reply);
+      }
+    }
+  }
+  await call("set_tempo", { clock: "tracker", disable_downbeat_detection: true, beats_per_bar: 3 });
+  await call("set_tempo", { beats_per_bar: 7 });
+  await checkTempo("meter-only MCP update", { beatsPerBar: 7, disableDownbeatDetection: true });
+  await call("set_tempo", { disable_downbeat_detection: false });
+  await checkTempo("re-enable tracker downbeats locks meter", { beatsPerBar: 4, disableDownbeatDetection: false });
+  await call("set_tempo", { clock: "metronome", beats_per_bar: 3 });
+  await call("set_tempo", { clock: "tracker" });
+  await checkTempo("selecting tracker locks meter", { clockSource: 2, beatsPerBar: 4 });
+
+  for (const clockSource of Object.values(clocks)) {
+    for (const disableDownbeatDetection of [false, true]) {
+      await http.write("PUT", "/tempo", { clockSource, disableDownbeatDetection, beatsPerBar: 5 });
+      await checkTempo(`HTTP meter rules (${clockSource}, disable=${disableDownbeatDetection})`, {
+        clockSource, disableDownbeatDetection,
+        beatsPerBar: clockSource === 2 && !disableDownbeatDetection ? 4 : 5,
+      });
+    }
+  }
+  await http.write("PUT", "/tempo", { clockSource: 2, disableDownbeatDetection: true, beatsPerBar: 99 });
+  await checkTempo("HTTP upper meter limit", { beatsPerBar: 8 });
+  await http.write("PUT", "/tempo", { beatsPerBar: 1 });
+  await checkTempo("HTTP lower meter limit", { beatsPerBar: 2 });
+
+  const engine = await http.get("/engine");
+  await http.write("PUT", "/engine", { ...engine, clockSource: 2, disableDownbeatDetection: true, beatsPerBar: 7 });
+  await checkTempo("full-engine endpoint accepts manual tracker meter", { beatsPerBar: 7, disableDownbeatDetection: true });
+  await call("save_patch", { name: "integration meter test" });
+  await http.write("PUT", "/tempo", { disableDownbeatDetection: false });
+  await call("load_patch", { name: "integration meter test" });
+  await checkTempo("patch round-trip preserves manual tracker meter", { beatsPerBar: 7, disableDownbeatDetection: true });
+  await http.write("PUT", "/engine", { ...engine, clockSource: 2, disableDownbeatDetection: false, beatsPerBar: 7 });
+  await checkTempo("full-engine endpoint enforces tracker meter", { beatsPerBar: 4, disableDownbeatDetection: false });
+
   await call("set_tempo", { clock: "metronome", metronome_bpm: 128, beats_per_bar: 4 });
   await call("set_tempo", { tempo_bias: "prefer_faster", responsiveness: 0.5 });
   await call("set_tempo", { clock: "tracker", tempo_bias: "neutral" });
   await call("tap_tempo");
   await call("reset_model");
+  await call("set_blackout", { enabled: true });
+  await call("get_blackout");
+  await call("set_blackout", { enabled: false });
+  await call("get_blackout");
+
+  // MIDI control: test bindings (note name, note number, CC, duplicate reassignment, clear) and enable/device.
+  await call("set_midi_binding", { function: "tapTempo", channel: 3, note: "C4" });
+  let midiState = await http.get("/midi");
+  record(
+    "set_midi_binding(C4) maps to note 60 on channel 3",
+    midiState.functions?.tapTempo?.assigned === true &&
+      midiState.functions?.tapTempo?.isCC === false &&
+      midiState.functions?.tapTempo?.channel === 3 &&
+      midiState.functions?.tapTempo?.number === 60 &&
+      midiState.functions?.tapTempo?.noteName === "C4",
+    JSON.stringify(midiState.functions?.tapTempo)
+  );
+  // Assigning the same channel + note to another function clears the previous function.
+  await call("set_midi_binding", { function: "resetDetector", channel: 3, note: 60 });
+  midiState = await http.get("/midi");
+  record(
+    "duplicate MIDI binding moves from tapTempo to resetDetector",
+    midiState.functions?.resetDetector?.assigned === true &&
+      midiState.functions?.resetDetector?.number === 60 &&
+      midiState.functions?.tapTempo?.assigned === false,
+    JSON.stringify({ reset: midiState.functions?.resetDetector, tap: midiState.functions?.tapTempo })
+  );
+  await call("set_midi_binding", { function: "blackout", channel: 2, cc: 64 });
+  midiState = await http.get("/midi");
+  record(
+    "set_midi_binding(cc=64) maps to CC 64 on channel 2",
+    midiState.functions?.blackout?.assigned === true &&
+      midiState.functions?.blackout?.isCC === true &&
+      midiState.functions?.blackout?.channel === 2 &&
+      midiState.functions?.blackout?.number === 64,
+    JSON.stringify(midiState.functions?.blackout)
+  );
+  await call("get_midi_bindings");
+  await call("set_midi_binding", { function: "resetDetector", clear: true });
+  await call("set_midi_binding", { function: "blackout", clear: true });
+  midiState = await http.get("/midi");
+  record(
+    "set_midi_binding(clear=true) unassigns functions",
+    midiState.functions?.resetDetector?.assigned === false &&
+      midiState.functions?.blackout?.assigned === false,
+    JSON.stringify({ reset: midiState.functions?.resetDetector, blackout: midiState.functions?.blackout })
+  );
+  if (origMidi?.availableDevices?.length) {
+    const dev = origMidi.availableDevices[0];
+    await call("select_midi_device", { name: dev.name, identifier: dev.identifier });
+  }
+  await call("set_midi_enabled", { enabled: true });
+  await call("set_midi_enabled", { enabled: false });
 
   // File playback: muted, a few seconds in, then back to live input.
   await call("play_file", { path: TEST_WAV, mute: true, start_s: 2, end_s: 5 });
@@ -228,6 +392,22 @@ try {
     if (outputId !== null) {
       await client.callTool({ name: "delete_output", arguments: { output_id: outputId } });
       exercised.add("delete_output.output_id");
+    }
+    if (origBlackout) {
+      await client.callTool({ name: "set_blackout", arguments: { enabled: true } });
+    }
+    if (origMidi) {
+      await http.write("PUT", "/midi", {
+        enabled: Boolean(origMidi.enabled),
+        deviceIdentifier: origMidi.deviceIdentifier || "",
+        deviceName: origMidi.deviceName || "",
+        functions: Object.fromEntries(
+          Object.entries(origMidi.functions || {}).map(([k, v]) => [
+            k,
+            v.assigned ? { channel: v.channel, isCC: Boolean(v.isCC), number: v.number } : { clear: true },
+          ])
+        ),
+      });
     }
     await client.callTool({ name: "load_patch", arguments: { name: SCRATCH_PATCH } });
     exercised.add("load_patch.name");

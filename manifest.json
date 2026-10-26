@@ -2,7 +2,7 @@
   "manifest_version": "0.1",
   "name": "audioslice",
   "display_name": "AudioSlice",
-  "version": "0.3.5",
+  "version": "0.3.15",
   "description": "Set up and diagnose AudioSlice, an advanced realtime audio analyzer for realtime visuals and VJing",
   "long_description": "Connects Claude to a running AudioSlice so you can ask what a track can drive, build OSC modulators for it, and fix OSC networking issues.",
   "author": {
@@ -69,7 +69,7 @@
     },
     {
       "name": "set_tempo",
-      "description": "Change the tempo source or metronome BPM."
+      "description": "Change the tempo source, metronome BPM, beats per bar, or tracker downbeat detection."
     },
     {
       "name": "set_audioslice_token",
@@ -85,7 +85,7 @@
     },
     {
       "name": "tap_tempo",
-      "description": "Restart the beat grid, like 'Tap for 1'."
+      "description": "Restart the beat grid, like the Tap button."
     },
     {
       "name": "list_patches",
@@ -98,6 +98,50 @@
     {
       "name": "load_patch",
       "description": "Replace the configuration with a saved patch."
+    },
+    {
+      "name": "get_blackout",
+      "description": "Check whether output blackout is currently active."
+    },
+    {
+      "name": "set_blackout",
+      "description": "Turn blackout on or off to silence or resume all output."
+    },
+    {
+      "name": "set_midi_enabled",
+      "description": "Enable or disable external MIDI input control."
+    },
+    {
+      "name": "list_midi_devices",
+      "description": "List available MIDI input devices and which is selected."
+    },
+    {
+      "name": "select_midi_device",
+      "description": "Select the active MIDI input device."
+    },
+    {
+      "name": "get_midi_bindings",
+      "description": "List controllable functions and their MIDI channel and Note/CC bindings."
+    },
+    {
+      "name": "set_midi_binding",
+      "description": "Assign or clear a MIDI channel and Note/CC binding for a controllable function."
+    },
+    {
+      "name": "get_license_status",
+      "description": "This copy's license: trial, serial or not set up, and whether output is allowed."
+    },
+    {
+      "name": "get_account",
+      "description": "Every serial on the license's email, with computers and downloads."
+    },
+    {
+      "name": "check_for_updates",
+      "description": "Whether a newer AudioSlice is available and covered by the license."
+    },
+    {
+      "name": "refresh_license",
+      "description": "Ask VJ Lab about the license now (a purchase or renewal applies at once)."
     }
   ],
   "prompts": [

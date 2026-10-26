@@ -22,6 +22,8 @@ We recommend keeping the defaults here.
 
 The one exception is that we find VJs like to 0.5x or 2x tempo with the `1` and `2` keyboard shortcuts, respectively. AudioSlice often understands by genre whether something is say, hiphop at 87 BPM vs 174 BPM drum & bass, but occasionally you might have a different point of view :)
 
+`1` halves the tempo when it's 160 BPM or faster (174 → 87); `2` doubles it when it's 90 BPM or slower (87 → 174).
+
 ![](/tempo/settings.webp)
 
 ## Experimental: Responsiveness slider
@@ -43,12 +45,17 @@ Of these, realistically most users only ever use `0` when auditioning and trying
 | 1 | Prefer slower tempos (0.5× tempo) |
 | 2 | Prefer faster tempos (2× tempo) |
 | 3 | No tempo preference |
+| \ | Blackout: stop all OSC output until pressed again (analysis keeps running) |
 
 Note: You should NOT need to tap tempo with `spacebar`. AudioSlice will literally do it for you. But some habits die hard, and some VJs just want it there if they need it. We won't stop you from tapping if you really want to!
 
 Resetting the model state with `0` can be useful if you're just clicking around auditioning tracks and you, like us, enjoy the ADHD bliss of listening to random 10-15 second segments for hours, watching shaders react and pulse.
 
 Do note however, that AudioSlice's splitter model is trained on (at shortest!) 12 second segments. So just know that if you listen to anything shorter than that, technically the model is still warming up, and the results you get before that may be suboptimal!
+
+## MIDI control
+
+You can trigger these from a MIDI controller (MIDI in; AudioSlice's output is OSC). In Advanced, turn on **Enable MIDI control**, choose your **MIDI Input**, then click **Learn** next to a function and press a key or pad, or move a knob: Reset Detector, Tempo Slower, Tempo Faster, Tempo Neutral, Tap Tempo, Blackout. Blackout from MIDI lasts only while the note or CC is held.
 
 ## Ableton Link
 

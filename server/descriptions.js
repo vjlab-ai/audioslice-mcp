@@ -19,20 +19,21 @@ export const TOOLS = {
       "something not working - it distinguishes the four failure modes that look identical from " +
       "the outside: not running, not hearing audio, not sending, or sending fine but the " +
       "receiver is not listening. Also call it before configuring anything, so you know the " +
-      "tempo and whether there is signal to work with. It also reports the license - retail, " +
-      "beta or trial, with days remaining - so call it when asked about the license or trial. An " +
-      "expired beta or trial disables all output, which looks exactly like not sending. " +
+      "tempo and whether there is signal to work with. It also reports the license in one line " +
+      "(get_license_status has the details). Without a valid license - no email and trial or " +
+      "serial entered yet, a trial that has ended, a serial that was revoked or refunded - all " +
+      "output is disabled, which looks exactly like not sending. " +
       "\n\n" +
-            "\n\n" +
       "Raise a performance concern only when this says FALLING BEHIND, which is measured. Nothing " +
       "here reports CPU or memory. AudioSlice runs entirely on the CPU and does not use the GPU; " +
       "if someone asks what it is costing them, say that and point them at Activity Monitor on " +
-      "macOS or Task Manager on Windows, which measures it properly. " +
+      "macOS, Task Manager on Windows or a system monitor on Linux, which measures it properly. " +
       "Docs note: AudioSlice needs clean audio from an application or an interface - microphone " +
       "input is explicitly not supported yet, so \"hearing nothing\" on a mic is expected rather " +
       "than broken. On macOS routing system audio needs a virtual device (BlackHole or " +
       "Loopback) plus a Multi-Output Device so the user can still hear it; on Windows nothing " +
-      "extra is needed, as AudioSlice detects the output device by loopback itself. read_doc " +
+      "extra is needed, as AudioSlice detects the output device by loopback itself; on Linux " +
+      "likewise, it lists each output as \"Listen to: <output>\". read_doc " +
       "audio-input for the full walkthrough before talking anyone through cables.",
   },
   analyze_audio: {
@@ -48,8 +49,8 @@ export const TOOLS = {
       "\n\n" +
       "This reports what each stem is doing in the current track. What a stem can carry at all, " +
       "and how reliably, is in the documentation - search_docs for \"signals\" to get the " +
-      "source-by-signal matrix, which also rates extraction accuracy per stem (tom, percussion " +
-      "and 'other' are moderate rather than high).",
+      "source-by-signal matrix, which also rates extraction accuracy per stem (tom and 'other' " +
+      "are moderate, percussion low).",
     args: {
       window_ms:
         "How far back to summarise, in milliseconds. Defaults to the full ~5900ms retained.",
@@ -192,6 +193,11 @@ export const TOOLS = {
         "Smoothing time in ms. 0 or omitted means none. Higher is smoother but laggier.",
       fire_every_beats:
         "For beat sources: fire only every nth beat. 4 = once a bar in 4/4.",
+      fire_first:
+        "For beat sources with fire_every_beats > 1: whether the cycle fires on the first beat " +
+        "then skips (true, \"Fire first\", default) or skips the first beat then fires (false, " +
+        "\"Skip first\"). For example, with fire_every_beats=2, true fires on beats 1 and 3, " +
+        "while false fires on beats 2 and 4.",
       beat_offset_frames:
         "Delay this modulator's beat event by n frames (~11.6ms each) without changing which " +
         "beats it fires on. Use it to stagger several modulators that share the same " +
@@ -235,6 +241,11 @@ export const TOOLS = {
         "beat stream it smears the impulse away rather than shaping it.",
       fire_every_beats:
         "For beat sources: fire only every nth beat. 4 = once a bar in 4/4.",
+      fire_first:
+        "For beat sources with fire_every_beats > 1: whether the cycle fires on the first beat " +
+        "then skips (true, \"Fire first\", default) or skips the first beat then fires (false, " +
+        "\"Skip first\"). For example, with fire_every_beats=2, true fires on beats 1 and 3, " +
+        "while false fires on beats 2 and 4.",
       beat_offset_frames:
         "Delay this modulator's beat event by n frames (~11.6ms each) without changing which " +
         "beats it fires on. Use it to stagger modulators that share a fire_every_beats so their " +
@@ -284,6 +295,9 @@ export const TOOLS = {
       "or sync to Ableton Link. Use the real-time tracker for live audio, and the metronome " +
       "when there is no reliable beat to track. If tracker confidence from get_status is low, " +
       "tempo_bias can steer it away from half-time or double-time readings. " +
+      "For other time signatures with the tracker, set disable_downbeat_detection=true and " +
+      "beats_per_bar=2..8: tempo still follows the audio, but bars are counted manually. " +
+      "With tracker downbeat detection enabled (the default), beats_per_bar is forced to 4. " +
       "\n\n" +
       "Docs note: the docs recommend leaving these alone. AudioSlice tracks tempo from the " +
       "audio with no tapping, click track or timecode, and follows changes live. Give it a bar " +
@@ -300,7 +314,14 @@ export const TOOLS = {
         "a fixed BPM; \"ableton_link\" negotiates with other Link apps on the network; \"osc\" " +
         "follows incoming OSC beats; \"none\" stops tempo entirely.",
       beats_per_bar:
-        "Beats per measure, for deciding which beat is beat 1. 4 for common time.",
+        "Beats per measure, 2..8. Forced to 4 when clock=tracker and downbeat detection is enabled. " +
+        "To use another count with the tracker, also set disable_downbeat_detection=true. " +
+        "Other clock sources allow any count regardless of that toggle.",
+      disable_downbeat_detection:
+        "Default false: use the real-time tracker's downbeats and beat numbering (4/4 only). " +
+        "True: ignore them and count bars using beats_per_bar, like the metronome. " +
+        "Only affects the tracker clock source; does not disable beat or tempo tracking. " +
+        "Setting false under the tracker forces beats_per_bar back to 4.",
       metronome_bpm:
         "Fixed BPM, when clock=metronome.",
       tempo_bias:
@@ -326,7 +347,8 @@ export const TOOLS = {
       "Docs note: on macOS the device wanted here is usually a virtual one (BlackHole or " +
       "Loopback) fed by a Multi-Output Device, not a physical input. On Windows AudioSlice " +
       "detects the outputting device by loopback on its own, and the docs are emphatic that " +
-      "VB-Audio Cable and Voicemeeter are not needed. read_doc audio-input before recommending " +
+      "VB-Audio Cable and Voicemeeter are not needed; on Linux it likewise lists each output as " +
+      "\"Listen to: <output>\". read_doc audio-input before recommending " +
       "any extra software.",
   },
   select_audio_device: {
@@ -425,6 +447,91 @@ export const TOOLS = {
         "Patch name from list_patches.",
     },
   },
+  get_blackout: {
+    title: "Get blackout state",
+    description:
+      "Check whether output blackout is currently active. When blackout is on, all OSC output " +
+      "is silenced without stopping audio analysis or inference.",
+  },
+  set_blackout: {
+    title: "Set blackout state",
+    description:
+      "Turn blackout on or off to silence or resume all OSC output. " +
+      "Unlike the UI keyboard shortcut which toggles, this sets the blackout state explicitly.",
+    args: {
+      enabled:
+        "true to silence all outputs, false to resume normal output transmission.",
+    },
+  },
+  set_midi_enabled: {
+    title: "Enable or disable MIDI control",
+    description:
+      "Turn AudioSlice's external MIDI input control on or off. When enabled, a connected MIDI " +
+      "controller can trigger AudioSlice functions mapped via set_midi_binding (such as Reset " +
+      "Detector, Blackout, Tempo Faster/Slower/Neutral, and Tap Tempo). Note: you do not need " +
+      "MIDI control to trigger those actions yourself - call tap_tempo, reset_model, set_blackout " +
+      "or set_tempo directly. Use this tool only when configuring a hardware or virtual MIDI " +
+      "controller for the user.",
+    args: {
+      enabled:
+        "true to enable MIDI input control and open the selected MIDI device, false to disable it.",
+    },
+  },
+  list_midi_devices: {
+    title: "List MIDI input devices",
+    description:
+      "List the MIDI input interfaces currently available on this machine, whether MIDI control " +
+      "is enabled and listening, and which MIDI device is selected. Call this before " +
+      "select_midi_device so you can pass an exact device name or identifier.",
+  },
+  select_midi_device: {
+    title: "Select the active MIDI input device",
+    description:
+      "Choose which MIDI input interface AudioSlice listens to for external MIDI control. Call " +
+      "list_midi_devices first to see the connected devices and their exact names and " +
+      "identifiers. Supply either name or identifier (or both). If MIDI control is not yet " +
+      "enabled, call set_midi_enabled(true) so AudioSlice begins listening on the selected device.",
+    args: {
+      name:
+        "Display name of the MIDI input device, from list_midi_devices.",
+      identifier:
+        "Platform device identifier, from list_midi_devices. Optional if name is given.",
+    },
+  },
+  get_midi_bindings: {
+    title: "List MIDI function bindings",
+    description:
+      "List every AudioSlice function that can be controlled via MIDI, along with its function " +
+      "key, display name, and current MIDI channel and Note or CC assignment. Call this before " +
+      "set_midi_binding to discover the exact function keys supported by the running version of " +
+      "AudioSlice and to inspect existing mappings.",
+  },
+  set_midi_binding: {
+    title: "Set or clear a MIDI function binding",
+    description:
+      "Assign a MIDI channel and either a MIDI Note (by number 0-127 or note name like \"C4\" or " +
+      "\"F#3\", where C4 = 60) or a MIDI CC controller number (0-127) to a controllable " +
+      "AudioSlice function, or clear an existing binding with clear=true. Call get_midi_bindings " +
+      "first to see the available function keys (currently resetDetector, blackout, tempoFaster, " +
+      "tempoSlower, tempoNeutral, tapTempo, plus any added in newer builds). Each Note or CC on " +
+      "a channel can only be bound to one function at a time; assigning a combination already " +
+      "used by another function automatically unassigns the previous one. A blackout binding is " +
+      "momentary: blackout is on only while the note or CC is held.",
+    args: {
+      function:
+        "Function key from get_midi_bindings (e.g. \"resetDetector\", \"blackout\", " +
+        "\"tempoFaster\", \"tempoSlower\", \"tempoNeutral\", \"tapTempo\").",
+      channel:
+        "MIDI channel, 1..16. Defaults to 1 (or preserves the function's existing channel).",
+      note:
+        "MIDI note to bind: either a note number (0..127) or a note name such as \"C4\", " +
+        "\"F#3\", or \"Bb2\" (middle C is C4 = 60). Mutually exclusive with cc and clear.",
+      cc:
+        "MIDI CC controller number to bind (0..127). Mutually exclusive with note and clear.",
+      clear:
+        "Set true to remove the MIDI binding from this function.",
+    },
+  },
   set_audioslice_token: {
     title: "Save the AudioSlice API token",
     description:
@@ -436,6 +543,45 @@ export const TOOLS = {
       token:
         "The token from AudioSlice > Advanced settings.",
     },
+  },
+  get_license_status: {
+    title: "Get this copy's license",
+    description:
+      "This copy of AudioSlice's license, as AudioSlice holds it (no internet needed): free " +
+      "trial with days left, activated with a serial, not set up yet, or not valid and why; " +
+      "whether output is allowed; the email and serial; and until when new versions are " +
+      "included. Call it when asked about the license, the trial or the serial, or when " +
+      "get_status says output is off because of the license. It does not ask VJ Lab - use " +
+      "refresh_license for that, and get_account for every serial and computer on the email. " +
+      "Licenses are entered and changed in AudioSlice (Help > License...), not through these tools.",
+  },
+  get_account: {
+    title: "Get the VJ Lab account",
+    description:
+      "Every serial registered to this license's email, from VJ Lab (AudioSlice asks over the " +
+      "internet): each serial's product and status, which computers it is active on and when " +
+      "each was last seen, until when new versions are included, and download links for the " +
+      "newest versions it covers. Use it for questions like \"which computers is my license on\" " +
+      "or \"where do I download\". It changes nothing: to free a computer's seat, renew, or have " +
+      "the serials emailed again, send the user to the account page it names.",
+  },
+  check_for_updates: {
+    title: "Check for a newer AudioSlice",
+    description:
+      "Whether a newer version of AudioSlice than the one running is available for this " +
+      "computer's platform and covered by this license, with its download link, and whether " +
+      "newer releases exist that need a renewal. AudioSlice asks VJ Lab over the internet. It " +
+      "installs nothing.",
+  },
+  refresh_license: {
+    title: "Refresh the license",
+    description:
+      "Ask VJ Lab about this copy's license now instead of waiting for AudioSlice's own check. " +
+      "A purchase, a renewal or a restored serial takes effect at once. Anything that would " +
+      "reduce access (a refund, a revoked serial, a computer removed on the account page) is " +
+      "kept and only applies the next time AudioSlice starts, so output never stops in the " +
+      "middle of a show. Use it after the user buys or renews, or when the license looks out " +
+      "of date.",
   },
 };
 

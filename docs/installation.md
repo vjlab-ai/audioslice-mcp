@@ -1,25 +1,41 @@
 # Installing AudioSlice
 
-AudioSlice is cross platform and easy to install. [Download the app here](https://shop.vjlab.ai/).
+AudioSlice is cross platform and easy to install. [Sign in to your account](https://account.vjlab.ai/account) with your email to download it.
 
 ## Windows
 
-Download and run the `.exe` file. 
+Download the `.zip`, extract it and run `AudioSlice.exe`. 
 
 ## Mac
 
 Download and run the `.dmg` file. 
 
+## Linux
+
+Download the `.tar.gz`, extract it and run `AudioSlice`.
+
 ## Other installation FAQs
 
-### Help! How do I upgrade from my 30-day trial version to my paid version!
+### What does AudioSlice ask for the first time I open it?
 
-They are separate installers. 
+Your email, then either your serial number or the free trial. You only do this once on each computer.
 
-When you paid you should get a download link to a new `.dmg` file or an `.exe`, probably packaged in a `.zip` archive. 
+### How do I go from the free trial to the paid version?
 
-Just run this new executable which has been created for your email, and everything should work. Please don't hesitate to contact us if you have an issue. 
+It's the same app, so there's nothing to reinstall. Open **Help > License...** and click **Buy AudioSlice**: when the purchase goes through, AudioSlice activates by itself. If you buy on [vjlab.ai](https://vjlab.ai) instead, your serial number is emailed to you: enter it in **Help > License...**.
 
-### What happens when my 30-day trial ends?
+### What happens when my trial ends?
 
-The app will keep functioning as normal, except OSC will just stop outputting values.
+The app keeps working and you can still open and edit your setup, but OSC output stops until you enter a serial.
+
+### Does AudioSlice need the internet?
+
+Opening it never does. Activating a serial needs the internet once; after that AudioSlice works offline, so it's safe at a venue without wifi.
+
+### How many computers can I use it on?
+
+A serial works on 2 computers at a time. On a third, AudioSlice offers to move the license there, or you can remove a computer at [account.vjlab.ai](https://account.vjlab.ai).
+
+### Which versions does my serial cover?
+
+Every version released in the 12 months after you buy. Those keep working for good; newer versions need a renewal. Your serials, computers and downloads are at [account.vjlab.ai](https://account.vjlab.ai).

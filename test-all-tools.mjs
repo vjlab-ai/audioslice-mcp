@@ -10,9 +10,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+import { AudioSliceClient } from "./server/client.js";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 // A short file in the repo, played muted so the test makes no sound.
 const TEST_WAV = join(HERE, "..", "tests", "model_test.wav");
+const http = new AudioSliceClient();
 const transport = new StdioClientTransport({
   command: process.execPath, args: [join(HERE, "server", "index.js")],
 });
@@ -39,6 +42,8 @@ const prompts = (await client.listPrompts()).prompts.map((p) => p.name);
 
 let outputId = null, modId = null;
 let origTempo = null, origDevice = null;
+let origBlackout = false;
+let origMidi = null;
 const BACKUP = "coverage backup";
 
 try {
@@ -47,6 +52,7 @@ try {
   await call("analyze_audio", { window_ms: 2000 });
   await call("list_outputs");
   await call("get_api_schema", { section: "modulator" });
+  await call("get_api_schema", { section: "midi" });
   await call("get_api_schema", { section: "all" });
   // Docs are vendored, so these are the one pair of tools that work with
   // AudioSlice closed - worth covering both the hit and the miss.
@@ -56,6 +62,17 @@ try {
   await call("read_doc", { page: "no-such-page" }, { expectError: true });
   const devices = await call("list_audio_devices");
   await call("list_patches");
+  const blackoutStatus = await call("get_blackout");
+  origBlackout = blackoutStatus.includes("Blackout is ON");
+  origMidi = await http.get("/midi");
+  await call("list_midi_devices");
+  await call("get_midi_bindings");
+  // Licensing. In a Debug build licensing is off and each says so; with a license, the last
+  // three have AudioSlice ask VJ Lab, so they need the internet.
+  await call("get_license_status");
+  await call("get_account");
+  await call("check_for_updates");
+  await call("refresh_license");
 
   origDevice = devices.match(/Currently open: (.+?) via/)?.[1] ?? null;
   origTempo = {
@@ -83,7 +100,7 @@ try {
   await call("update_modulator", {
     output_id: outputId, modulator_id: modId,
     osc_path: "/coverage/b", smoothing_ms: 50, invert: true, fire_every_beats: 4,
-    beat_offset_frames: 2, enabled: true,
+    fire_first: false, beat_offset_frames: 2, enabled: true,
   });
   await call("list_outputs");
 
@@ -97,9 +114,30 @@ try {
 
   // ---- tempo ---------------------------------------------------------------
   await call("set_tempo", { clock: "metronome", metronome_bpm: 128, beats_per_bar: 4 });
+  await call("set_tempo", { clock: "tracker", disable_downbeat_detection: true, beats_per_bar: 3 });
+  await call("set_tempo", { disable_downbeat_detection: false });
   await call("set_tempo", { tempo_bias: "prefer_faster", responsiveness: 0.5 });
   await call("tap_tempo");
   await call("reset_model");
+  await call("set_blackout", { enabled: true });
+  await call("get_blackout");
+  await call("set_blackout", { enabled: false });
+  await call("get_blackout");
+
+  // ---- MIDI control --------------------------------------------------------
+  await call("set_midi_binding", { function: "tapTempo", channel: 1, note: "C4" });
+  await call("set_midi_binding", { function: "blackout", channel: 2, cc: 64 });
+  await call("get_midi_bindings");
+  await call("set_midi_binding", { function: "tapTempo", clear: true });
+  await call("set_midi_binding", { function: "blackout", clear: true });
+  await call("set_midi_binding", { function: "noSuchFunction", note: 60 }, { expectError: true });
+  if (origMidi?.availableDevices?.length) {
+    const dev = origMidi.availableDevices[0];
+    await call("select_midi_device", { name: dev.name, identifier: dev.identifier });
+  }
+  await call("select_midi_device", { name: "No Such MIDI Device" }, { expectError: true });
+  await call("set_midi_enabled", { enabled: true });
+  await call("set_midi_enabled", { enabled: false });
 
   // ---- file playback ---------------------------------------------------------
   await call("play_file", { path: TEST_WAV, mute: true, start_s: 1, end_s: 4 });
@@ -144,6 +182,22 @@ try {
   try {
     if (origTempo) {
       await client.callTool({ name: "set_tempo", arguments: { clock: "tracker", tempo_bias: "neutral" } });
+    }
+    if (origBlackout) {
+      await client.callTool({ name: "set_blackout", arguments: { enabled: true } });
+    }
+    if (origMidi) {
+      await http.write("PUT", "/midi", {
+        enabled: Boolean(origMidi.enabled),
+        deviceIdentifier: origMidi.deviceIdentifier || "",
+        deviceName: origMidi.deviceName || "",
+        functions: Object.fromEntries(
+          Object.entries(origMidi.functions || {}).map(([k, v]) => [
+            k,
+            v.assigned ? { channel: v.channel, isCC: Boolean(v.isCC), number: v.number } : { clear: true },
+          ])
+        ),
+      });
     }
     // outputId came from the pre-load config; after load_patch it is gone, but
     // delete is idempotent enough for cleanup purposes.

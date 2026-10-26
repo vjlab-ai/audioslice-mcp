@@ -1,6 +1,6 @@
 # What is AudioSlice? 🎵🗡️
 
-AudioSlice ([download](https://shop.vjlab.ai/)) is the most advanced realtime music analyzer in the world. (If you find a better one, please let us know. Seriously.)
+AudioSlice ([download](https://account.vjlab.ai/account)) is the most advanced realtime music analyzer in the world. (If you find a better one, please let us know. Seriously.)
 
 ![The AudioSlice Outputs tab — each row routes one source and one signal to an OSC path, with a live view of that signal on the right.](/outputs_screenshot.webp)
 
@@ -12,7 +12,7 @@ AudioSlice has a simple goal: listen to a raw stream of music (of any genre) lik
 
 Focus on how your visuals will look and perform with parameters, scenes, clips, and colors that take place over seconds, minutes, or hours -- not milliseconds.
 
-AudioSlice is cross platform (Mac and Windows) and needs a clean audio connection (not a mic), but requires no other integrations or software: no ShowKontrol, no ProDJ link, no Ableton Link, nothing. Just pure audio in, OSC out, every 11 ms.  
+AudioSlice is cross platform (Mac, Windows and Linux) and needs a clean audio connection (not a mic), but requires no other integrations or software: no ShowKontrol, no ProDJ link, no Ableton Link, nothing. Just pure audio in, OSC out, every 11 ms.  
 
 See our tutorials [here](https://www.youtube.com/@its-drevo)!
 
@@ -51,13 +51,14 @@ See [modulators](/audioslice/modulators) to learn more.
 
 ## System requirements
 
-AudioSlice works on both Windows and Mac OS X.
+AudioSlice works on macOS, Windows and Linux.
 
 | | Requirement |
 |---|---|
 | **macOS** | 11 or later, Apple Silicon (M1 or newer) |
 | **Windows** | 10 or 11, 64-bit |
-| **Audio in** | Any input the OS exposes — an interface, a virtual loopback device, or the built-in microphone |
+| **Linux** | 64-bit x86, Ubuntu 22.04+ or Fedora 36+ (glibc 2.35+) |
+| **Audio in** | Clean audio: an interface or a virtual loopback device (not a microphone) |
 | **Somewhere to send it** | TouchDesigner, Resolume, MadMapper, Synesthesia, or anything else that speaks OSC |
 
 On Mac we recommand virtual audio cables like Blackhole or Amoeba Loopback. 
@@ -66,6 +67,6 @@ For Windows NO virtual audio cable is needed! Say goodbye to configuring VB Cabl
 
 ## Where to download
 
-AudioSlice is available in our [online shop](https://shop.vjlab.ai), with a 30-day free trial. 
+[Sign in to your account](https://account.vjlab.ai/account) with your email to download AudioSlice or start the free trial, or buy it in our [shop](https://shop.vjlab.ai/audioslice).
 
-After 30 days, the app will still function but no OSC will be output.
+When the trial ends, the app will still function but no OSC will be output.

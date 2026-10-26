@@ -99,7 +99,7 @@ AudioSlice understands not only beats, but downbeats as well and is able to know
 
 This is an embarassingly difficult task across every genre for a model of our size and speed, and we think you'll find it a wonderful tool in your live-visuals-busking toolkit. 
 
-> We do only support the 4/4 time signature at this time. RIP your 3/4 waltz visuals.
+> Downbeat detection is 4/4 only. For other meters, turn on **Disable downbeat detection in real-time tracker** in Tempo settings and set **Beats Per Measure** (2-8): AudioSlice still tracks the beat and tempo but counts the bars itself, and `Tap` sets where the 1 falls.
 
 #### Beat onsets
 
@@ -118,6 +118,8 @@ Or use envelope creator to create shapes, firing FLOAT values in your range, syn
 Or perhaps the most useful, trigger single beat events (`Switch` mode `ON` again), every `N` beats. Useful to trigger new scenes or color palettes.
 
 ![](/modulators/beat_every_8.webp)
+
+Next to it, **Fire first** (the default) fires on the first beat of each cycle; **Skip first** skips it and fires one beat later. Firing every 2 beats, that's beats 1 and 3 versus 2 and 4.
 
 While AudioSlice can detect downbeats (1 vs 2, 3, 4), if you'd like your `N` beats to "start" at a particular point, you can use the `Tap` button to sync your phrase starts:
 

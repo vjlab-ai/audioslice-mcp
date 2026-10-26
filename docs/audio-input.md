@@ -4,7 +4,7 @@ AudioSlice uses only raw audio as an input. No ProDJ link, Ableton Link, or clic
 
 It will need to be clean audio from an application on your computer or from an audio interface, though. Microphone input won't quite cut it yet (give us until our next model :)).
 
-But whether you are using audio from Spotify, VLC, iTunes, Rekordbox, Ableton, or a browser tab, the AudioSlice experience is easy to route on both Mac OS X and Windows. 
+But whether you are using audio from Spotify, VLC, iTunes, Rekordbox, Ableton, or a browser tab, the AudioSlice experience is easy to route on macOS, Windows and Linux. 
 
 ## Gain staging
 
@@ -69,3 +69,7 @@ We are beyond proud that for routing audio on Windows, you only need AudioSlice.
 AudioSlice on Windows will automatically detect via loopback which of your devices in outputting audio. And if it gets it wrong, you can just select a new one using the audio input selector dropdown in `Audio Settings`. 
 
 It's that easy!
+
+## Capturing system audio (Linux)
+
+No virtual cable needed here either. With PipeWire or PulseAudio (the default on Ubuntu and Fedora), the input selector in `Audio Settings` lists each output as `Listen to: <output>`; a fresh install listens to your default output.

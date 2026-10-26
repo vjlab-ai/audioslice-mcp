@@ -14,9 +14,23 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, platform } from "node:os";
 
-import { AudioSliceClient } from "./client.js";
+import { AudioSliceClient, currentTool } from "./client.js";
 import { stemIndex, streamId, stemName, msToAlpha, STEMS, STREAMS } from "./stems.js";
-import { formatStatus, formatSignals, formatActivity, formatOutputs, formatDocHits } from "./format.js";
+import {
+  formatStatus,
+  formatSignals,
+  formatActivity,
+  formatOutputs,
+  formatDocHits,
+  formatMidiDevices,
+  formatMidiBindings,
+  formatLicense,
+  formatLicenseResult,
+  formatAccount,
+  formatUpdates,
+  LICENSING_OFF,
+  NO_LICENSE_YET,
+} from "./format.js";
 import { searchDocs, readDoc, pageList, docsAvailable } from "./docs.js";
 import { TOOLS, PROMPTS } from "./descriptions.js";
 
@@ -89,6 +103,14 @@ try {
 
 const server = new McpServer({ name: "audioslice", version: PKG.version });
 
+// Run every tool handler with its name in scope, so client.js can tell AudioSlice
+// which tool made each request.
+{
+  const register = server.registerTool.bind(server);
+  server.registerTool = (name, config, handler) =>
+    register(name, config, (...args) => currentTool.run(name, () => handler(...args)));
+}
+
 // --- read tools -------------------------------------------------------------
 
 server.registerTool(
@@ -102,6 +124,28 @@ server.registerTool(
   async () => {
     try {
       return text(formatStatus(await client.get("/state")));
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "get_blackout",
+  {
+    title: T.get_blackout.title,
+    description: T.get_blackout.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async () => {
+    try {
+      const res = await client.get("/blackout");
+      return text(
+        res.blackout
+          ? "Blackout is ON: all OSC output is silenced."
+          : "Blackout is OFF: outputs are transmitting normally."
+      );
     } catch (e) {
       return fail(e);
     }
@@ -237,7 +281,7 @@ server.registerTool(
     description: T.get_api_schema.description,
     inputSchema: {
       section: z
-        .enum(["modulator", "output", "settings", "tempo", "signalSummary", "statistics", "all"])
+        .enum(["modulator", "output", "settings", "tempo", "midi", "signalSummary", "statistics", "all"])
         .optional()
         .describe(T.get_api_schema.args.section),
     },
@@ -331,6 +375,10 @@ server.registerTool(
         .max(256)
         .optional()
         .describe(T.create_modulator.args.fire_every_beats),
+      fire_first: z
+        .boolean()
+        .optional()
+        .describe(T.create_modulator.args.fire_first),
       beat_offset_frames: z
         .number()
         .int()
@@ -359,6 +407,7 @@ server.registerTool(
       if (a.smoothing_ms !== undefined) body.alpha = msToAlpha(a.smoothing_ms);
       if (a.threshold !== undefined) body.envThreshold = a.threshold;
       if (a.fire_every_beats !== undefined) body.beatModulo = a.fire_every_beats;
+      if (a.fire_first !== undefined) body.beatCountOffset = a.fire_first ? 1 : 0;
       if (a.beat_offset_frames !== undefined) body.beatPhaseOffsetFrames = a.beat_offset_frames;
       if (a.switch_mode !== undefined) body.switchMode = a.switch_mode;
 
@@ -390,6 +439,7 @@ server.registerTool(
       smoothing_ms: z.number().min(0).max(10000).optional().describe(T.update_modulator.args.smoothing_ms),
       threshold: z.number().min(0).max(1).optional().describe(T.update_modulator.args.threshold),
       fire_every_beats: z.number().int().min(1).max(256).optional().describe(T.update_modulator.args.fire_every_beats),
+      fire_first: z.boolean().optional().describe(T.update_modulator.args.fire_first),
       beat_offset_frames: z.number().int().min(0).max(64).optional().describe(T.update_modulator.args.beat_offset_frames),
       switch_mode: z.boolean().optional().describe(T.update_modulator.args.switch_mode),
       invert: z.boolean().optional().describe(T.update_modulator.args.invert),
@@ -408,6 +458,7 @@ server.registerTool(
       if (a.smoothing_ms !== undefined) body.alpha = msToAlpha(a.smoothing_ms);
       if (a.threshold !== undefined) body.envThreshold = a.threshold;
       if (a.fire_every_beats !== undefined) body.beatModulo = a.fire_every_beats;
+      if (a.fire_first !== undefined) body.beatCountOffset = a.fire_first ? 1 : 0;
       if (a.beat_offset_frames !== undefined) body.beatPhaseOffsetFrames = a.beat_offset_frames;
       if (a.switch_mode !== undefined) body.switchMode = a.switch_mode;
       if (a.invert !== undefined) body.invert = a.invert;
@@ -482,6 +533,7 @@ server.registerTool(
         .describe(T.set_tempo.args.clock),
       metronome_bpm: z.number().min(20).max(300).optional().describe(T.set_tempo.args.metronome_bpm),
       beats_per_bar: z.number().int().min(2).max(8).optional().describe(T.set_tempo.args.beats_per_bar),
+      disable_downbeat_detection: z.boolean().optional().describe(T.set_tempo.args.disable_downbeat_detection),
       tempo_bias: z
         .enum(["neutral", "prefer_slower", "prefer_faster"])
         .optional()
@@ -497,11 +549,14 @@ server.registerTool(
       const body = {};
       if (a.clock) body.clockSource = CLOCK[a.clock];
       if (a.metronome_bpm !== undefined) body.metronomeTempo = a.metronome_bpm;
+      if (a.beats_per_bar !== undefined) body.beatsPerBar = a.beats_per_bar;
+      if (a.disable_downbeat_detection !== undefined) body.disableDownbeatDetection = a.disable_downbeat_detection;
       if (a.tempo_bias) body.tempoBias = BIAS[a.tempo_bias];
       if (a.responsiveness !== undefined) body.responsiveness = a.responsiveness;
       if (Object.keys(body).length === 0) return text("Nothing to change - no fields were supplied.");
       await client.write("PUT", "/tempo", body);
-      return text(`Tempo settings updated: ${Object.keys(body).join(", ")}.`);
+      const applied = await client.get("/tempo");
+      return text(`Tempo settings updated: ${Object.keys(body).map((key) => `${key}=${JSON.stringify(applied[key])}`).join(", ")}.`);
     } catch (e) {
       return fail(e);
     }
@@ -594,6 +649,180 @@ server.registerTool(
       return text(
         "Beat tracker reset. Tracking re-locks from the audio that follows - give it a bar or two, " +
         "then check get_status."
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "set_blackout",
+  {
+    title: T.set_blackout.title,
+    description: T.set_blackout.description,
+    inputSchema: {
+      enabled: z.boolean().describe(T.set_blackout.args.enabled),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false },
+  },
+  async ({ enabled }) => {
+    try {
+      const res = await client.write("PUT", "/blackout", { enabled });
+      return text(
+        res.blackout
+          ? "Blackout enabled. All output destinations are now silenced."
+          : "Blackout disabled. Output transmission resumed."
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "set_midi_enabled",
+  {
+    title: T.set_midi_enabled.title,
+    description: T.set_midi_enabled.description,
+    inputSchema: {
+      enabled: z.boolean().describe(T.set_midi_enabled.args.enabled),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
+  },
+  async ({ enabled }) => {
+    try {
+      const res = await client.write("PUT", "/midi", { enabled });
+      if (!res.enabled) {
+        return text("MIDI control disabled.");
+      }
+      const dev = res.deviceName ? `"${res.deviceName}"` : "(no device selected)";
+      return text(
+        `MIDI control enabled on ${dev}${res.running ? " (listening)" : " (device not currently open)"}.`
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "list_midi_devices",
+  {
+    title: T.list_midi_devices.title,
+    description: T.list_midi_devices.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async () => {
+    try {
+      return text(formatMidiDevices(await client.get("/midi")));
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "select_midi_device",
+  {
+    title: T.select_midi_device.title,
+    description: T.select_midi_device.description,
+    inputSchema: {
+      name: z.string().min(1).optional().describe(T.select_midi_device.args.name),
+      identifier: z.string().min(1).optional().describe(T.select_midi_device.args.identifier),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
+  },
+  async ({ name, identifier }) => {
+    try {
+      if (!name && !identifier) {
+        return fail(new Error("Supply at least one of \"name\" or \"identifier\" from list_midi_devices."));
+      }
+      const body = {};
+      if (name !== undefined) body.deviceName = name;
+      if (identifier !== undefined) body.deviceIdentifier = identifier;
+      const res = await client.write("PUT", "/midi", body);
+      return text(
+        `Selected MIDI device "${res.deviceName || name || identifier}"` +
+        (res.enabled
+          ? res.running
+            ? " (MIDI control enabled and listening)."
+            : " (MIDI control enabled, but device could not be opened)."
+          : " (MIDI control is currently disabled - call set_midi_enabled(true) to start listening).")
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "get_midi_bindings",
+  {
+    title: T.get_midi_bindings.title,
+    description: T.get_midi_bindings.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async () => {
+    try {
+      return text(formatMidiBindings(await client.get("/midi")));
+    } catch (e) {
+      return fail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "set_midi_binding",
+  {
+    title: T.set_midi_binding.title,
+    description: T.set_midi_binding.description,
+    inputSchema: {
+      function: z.string().min(1).describe(T.set_midi_binding.args.function),
+      channel: z.number().int().min(1).max(16).optional().describe(T.set_midi_binding.args.channel),
+      note: z
+        .union([z.number().int().min(0).max(127), z.string().min(1)])
+        .optional()
+        .describe(T.set_midi_binding.args.note),
+      cc: z.number().int().min(0).max(127).optional().describe(T.set_midi_binding.args.cc),
+      clear: z.boolean().optional().describe(T.set_midi_binding.args.clear),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
+  },
+  async ({ function: fnKey, channel, note, cc, clear }) => {
+    try {
+      const entry = {};
+      if (clear === true) {
+        if (note !== undefined || cc !== undefined) {
+          return fail(new Error("Do not combine clear=true with note or cc."));
+        }
+        entry.clear = true;
+      } else {
+        if (note !== undefined && cc !== undefined) {
+          return fail(new Error("Specify either \"note\" or \"cc\", not both."));
+        }
+        if (note === undefined && cc === undefined && channel === undefined) {
+          return fail(new Error("Specify \"note\" (0..127 or e.g. \"C4\"), \"cc\" (0..127), or \"clear\": true."));
+        }
+        if (channel !== undefined) entry.channel = channel;
+        if (note !== undefined) entry.note = note;
+        if (cc !== undefined) entry.cc = cc;
+      }
+
+      const res = await client.write("PUT", "/midi", {
+        functions: { [fnKey]: entry },
+      });
+      const updated = res.functions?.[fnKey];
+      if (!updated || !updated.assigned) {
+        return text(`Cleared MIDI binding for ${fnKey}.`);
+      }
+      const triggerDesc = updated.isCC
+        ? `CC ${updated.number}`
+        : `${updated.noteName || updated.label} (note ${updated.number})`;
+      return text(
+        `Bound ${fnKey} ("${updated.name}") to MIDI Channel ${updated.channel}, ${triggerDesc}.`
       );
     } catch (e) {
       return fail(e);
@@ -735,6 +964,108 @@ server.registerTool(
       return text("Token saved and verified - AudioSlice is reachable.");
     } catch (e) {
       return fail(new Error(`Token saved, but AudioSlice still is not reachable: ${e.message}`));
+    }
+  }
+);
+
+// --- license (VJ Lab Cloud) -------------------------------------------------
+// AudioSlice answers these itself; for account, updates and refresh it asks VJ Lab's server,
+// waiting up to 10s, so they get a longer timeout than local calls. It answers 409 when
+// licensing is off in this run, 502 when it could not reach VJ Lab, and 404 when the running
+// version predates licensing.
+
+const LICENSE_TIMEOUT_MS = 15000;
+const PLATFORM = { darwin: "macos", win32: "windows", linux: "linux" }[platform()] || platform();
+
+function licenseFail(e) {
+  if (e.status === 409) return text(LICENSING_OFF);
+  if (e.status === 404) {
+    return fail(new Error("This version of AudioSlice does not report its license. Updating AudioSlice adds it."));
+  }
+  if (e.status === 502 || e.status === 422) {
+    let message = "";
+    try {
+      message = JSON.parse(e.body).error;
+    } catch {
+      /* not JSON */
+    }
+    return fail(new Error(message || e.message));
+  }
+  return fail(e);
+}
+
+server.registerTool(
+  "get_license_status",
+  {
+    title: T.get_license_status.title,
+    description: T.get_license_status.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async () => {
+    try {
+      return text(formatLicense(await client.get("/license")));
+    } catch (e) {
+      return licenseFail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "get_account",
+  {
+    title: T.get_account.title,
+    description: T.get_account.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async () => {
+    try {
+      const lic = await client.get("/license");
+      if (lic.state === "unmanaged") return text(LICENSING_OFF);
+      if (lic.state === "none") return text(NO_LICENSE_YET);
+      return text(formatAccount(await client.get("/license/account", LICENSE_TIMEOUT_MS), lic));
+    } catch (e) {
+      return licenseFail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "check_for_updates",
+  {
+    title: T.check_for_updates.title,
+    description: T.check_for_updates.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  async () => {
+    try {
+      const lic = await client.get("/license");
+      if (lic.state === "unmanaged") return text(LICENSING_OFF);
+      if (lic.state === "none") return text(NO_LICENSE_YET);
+      const acc = await client.get("/license/account", LICENSE_TIMEOUT_MS);
+      return text(formatUpdates(acc, lic, PLATFORM));
+    } catch (e) {
+      return licenseFail(e);
+    }
+  }
+);
+
+server.registerTool(
+  "refresh_license",
+  {
+    title: T.refresh_license.title,
+    description: T.refresh_license.description,
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  async () => {
+    try {
+      // Not queued with the engine writes (client.write): it parks no output thread.
+      return text(formatLicenseResult(await client.request("POST", "/license/refresh", {}, LICENSE_TIMEOUT_MS)));
+    } catch (e) {
+      return licenseFail(e);
     }
   }
 );

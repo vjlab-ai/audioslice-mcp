@@ -12,8 +12,8 @@ AudioSlice doesn't draw your visuals. It produces control signals (OSC messages)
 
 ... or anything else that takes OSC. 
 
-::: warning Other protocols
-Support for DMX, ArtNet, and other protocols is coming soon!
+::: info
+AudioSlice outputs OSC only.
 :::
 
 ## Creating a new output group
@@ -39,7 +39,7 @@ If you click on the pencil icon, you can edit its properties:
 You can adjust various things like:
 
 * `Host and port`: use `127.0.0.1` for `localhost`, and port numbers must be integers
-* `Protocol` (today just OSC, but others like DMX and ArtNet coming soon)
+* `Protocol` (OSC)
 * `Send Every`: how often OSC packets are sent. 11ms is the fastest, but if your application doesn't handle that rate well, you can increase the update ms
 * `Paths for beat/tempo messages`: this is usually done better via modulators which can send beat ramps or onset events, but if you need the numeric tempo as a FLOAT or INT (and don't want to use Ableton Link!), you can set these paths
 

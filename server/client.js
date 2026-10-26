@@ -4,11 +4,19 @@
 // baked into the bundle at build time rather than fetched, so a machine with no
 // internet behaves identically to one with it.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
 const DEFAULT_PORT = 8722;
+
+/**
+ * The MCP tool whose handler is running, so each request can name it in an
+ * x-audioslice-mcp-tool header. AudioSlice counts tool use from it for its
+ * anonymous usage statistics; nothing else is sent. Set by index.js.
+ */
+export const currentTool = new AsyncLocalStorage();
 
 /** Where AudioSlice persists its settings, per platform. */
 function settingsDir() {
@@ -67,11 +75,13 @@ export class AudioSliceClient {
   headers() {
     const h = { "content-type": "application/json" };
     if (this.token) h.authorization = `Bearer ${this.token}`;
+    const tool = currentTool.getStore();
+    if (tool) h["x-audioslice-mcp-tool"] = tool;
     return h;
   }
 
   /** Turn transport failures into something a person can act on. */
-  friendlyError(err) {
+  friendlyError(err, timeoutMs = 5000) {
     const code = err?.cause?.code || err?.code;
     if (code === "ECONNREFUSED" || code === "ERR_SOCKET_CONNECTION_TIMEOUT") {
       return new Error(
@@ -84,16 +94,20 @@ export class AudioSliceClient {
     }
     if (code === "ETIMEDOUT" || err?.name === "AbortError") {
       return new Error(
-        `AudioSlice did not respond within 5s on port ${this.port}. It may be busy starting up, ` +
+        `AudioSlice did not respond within ${timeoutMs / 1000}s on port ${this.port}. It may be busy starting up, ` +
           `or wedged - check that its window is responsive.`
       );
     }
     return err;
   }
 
-  async request(method, path, body) {
+  /**
+   * timeoutMs: 5s suits everything AudioSlice answers locally. The license calls that make
+   * AudioSlice ask VJ Lab's server wait up to 10s for it, so they pass more.
+   */
+  async request(method, path, body, timeoutMs = 5000) {
     const url = `${this.baseUrl}${path}`;
-    const signal = AbortSignal.timeout(5000);
+    const signal = AbortSignal.timeout(timeoutMs);
     let res;
     try {
       res = await fetch(url, {
@@ -103,7 +117,7 @@ export class AudioSliceClient {
         signal,
       });
     } catch (err) {
-      throw this.friendlyError(err);
+      throw this.friendlyError(err, timeoutMs);
     }
 
     if (res.status === 401) {
@@ -116,11 +130,16 @@ export class AudioSliceClient {
     }
     if (res.status === 404) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Not found: ${method} ${path}. ${text}`);
+      const err = new Error(`Not found: ${method} ${path}. ${text}`);
+      err.status = 404;
+      throw err;
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`AudioSlice returned ${res.status} for ${method} ${path}. ${text}`);
+      const err = new Error(`AudioSlice returned ${res.status} for ${method} ${path}. ${text}`);
+      err.status = res.status; // so a tool can tell "offline" from "not available here"
+      err.body = text;
+      throw err;
     }
     const text = await res.text();
     if (!text) return {};
@@ -131,8 +150,8 @@ export class AudioSliceClient {
     }
   }
 
-  get(path) {
-    return this.request("GET", path);
+  get(path, timeoutMs) {
+    return this.request("GET", path, undefined, timeoutMs);
   }
 
   /**
