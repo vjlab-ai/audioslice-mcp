@@ -188,7 +188,9 @@ server.registerTool(
   async () => {
     try {
       const r = await client.get("/outputs");
-      return text(formatOutputs(r.outputs || r));
+      // With no outputs the app sends {"outputs": null}: that's an empty list, not a reason to
+      // read the whole reply as the outputs (whose one value, null, would then throw).
+      return text(formatOutputs(r && "outputs" in r ? r.outputs : r));
     } catch (e) {
       return fail(e);
     }
