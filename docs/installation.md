@@ -8,11 +8,19 @@ Download the `.zip`, extract it and run `AudioSlice.exe`.
 
 ## Mac
 
-Download and run the `.dmg` file. 
+Download the `.zip`, open it, and move `AudioSlice.app` to your Applications folder.
 
 ## Linux
 
 Download the `.tar.gz`, extract it and run `AudioSlice`.
+
+## What's in the download
+
+Beside the app:
+
+- `AudioSlice demo config.json`: the setup AudioSlice opens with the first time, with outputs for Resolume, TouchDesigner and Synesthesia. Open it again any time with **File > Open...**.
+- `td_demo.toe`: a TouchDesigner patch those outputs drive.
+- `audioslice-mcp-<version>.mcpb`: the [Claude integration](./mcp.md) for this version of AudioSlice.
 
 ## Other installation FAQs
 

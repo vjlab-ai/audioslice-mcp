@@ -350,7 +350,9 @@ server.registerTool(
     inputSchema: {
       output_id: z.number().int().describe(T.create_modulator.args.output_id),
       osc_path: z.string().describe(T.create_modulator.args.osc_path),
-      stem: z.enum(STEMS).describe(T.create_modulator.args.stem),
+      stem: z.enum(STEMS).optional().describe(T.create_modulator.args.stem),
+      expression: z.string().max(511).optional().describe(T.create_modulator.args.expression),
+      output_type: z.enum(["float", "integer"]).optional().describe(T.create_modulator.args.output_type),
       stream: z
         .enum(Object.keys(STREAMS))
         .optional()
@@ -397,12 +399,22 @@ server.registerTool(
   },
   async (a) => {
     try {
+      if ((a.expression === undefined) === (a.stem === undefined)) {
+        return fail(new Error("Provide exactly one of stem or expression."));
+      }
+      if (a.expression !== undefined &&
+          ["stream", "range_min", "range_max", "smoothing_ms", "threshold", "fire_every_beats",
+            "fire_first", "beat_offset_frames", "switch_mode"].some((key) => a[key] !== undefined)) {
+        return fail(new Error("Expression modulators do not use stem shaping settings."));
+      }
       const body = {
         path: a.osc_path,
-        sourceIndex: stemIndex(a.stem),
+        sourceIndex: a.expression === undefined ? stemIndex(a.stem) : 15,
         stemMode: a.stream ? streamId(a.stream) : 1,
         enabled: true,
       };
+      if (a.expression !== undefined) body.expression = a.expression;
+      if (a.output_type !== undefined) body.outputType = a.output_type === "integer" ? 1 : 0;
       if (a.name) body.name = a.name;
       if (a.range_min !== undefined) body.rangeMin = a.range_min;
       if (a.range_max !== undefined) body.rangeMax = a.range_max;
@@ -414,8 +426,9 @@ server.registerTool(
       if (a.switch_mode !== undefined) body.switchMode = a.switch_mode;
 
       const r = await client.write("POST", `/outputs/${a.output_id}/modulators`, body);
+      const sourceName = a.expression === undefined ? stemName(body.sourceIndex) : "expression";
       return text(
-        `Created modulator ${r.id} on output ${a.output_id}: ${stemName(body.sourceIndex)} -> ${a.osc_path}. ` +
+        `Created modulator ${r.id} on output ${a.output_id}: ${sourceName} -> ${a.osc_path}. ` +
         `Verify it with describe_modulator(${a.output_id}, ${r.id}).`
       );
     } catch (e) {
@@ -435,6 +448,8 @@ server.registerTool(
       osc_path: z.string().optional().describe(T.update_modulator.args.osc_path),
       enabled: z.boolean().optional().describe(T.update_modulator.args.enabled),
       stem: z.enum(STEMS).optional().describe(T.update_modulator.args.stem),
+      expression: z.string().max(511).optional().describe(T.update_modulator.args.expression),
+      output_type: z.enum(["float", "integer"]).optional().describe(T.update_modulator.args.output_type),
       stream: z.enum(Object.keys(STREAMS)).optional().describe(T.update_modulator.args.stream),
       range_min: z.number().min(-10000).max(10000).optional().describe(T.update_modulator.args.range_min),
       range_max: z.number().min(-10000).max(10000).optional().describe(T.update_modulator.args.range_max),
@@ -450,10 +465,23 @@ server.registerTool(
   },
   async (a) => {
     try {
+      if (a.expression !== undefined && a.stem !== undefined) {
+        return fail(new Error("Provide expression without stem when selecting expression mode."));
+      }
+      if (a.expression !== undefined &&
+          ["stream", "range_min", "range_max", "smoothing_ms", "threshold", "fire_every_beats",
+            "fire_first", "beat_offset_frames", "switch_mode", "invert"].some((key) => a[key] !== undefined)) {
+        return fail(new Error("Expression modulators do not use stem shaping settings."));
+      }
       const body = {};
       if (a.osc_path !== undefined) body.path = a.osc_path;
       if (a.enabled !== undefined) body.enabled = a.enabled;
       if (a.stem !== undefined) body.sourceIndex = stemIndex(a.stem);
+      if (a.expression !== undefined) {
+        body.sourceIndex = 15;
+        body.expression = a.expression;
+      }
+      if (a.output_type !== undefined) body.outputType = a.output_type === "integer" ? 1 : 0;
       if (a.stream !== undefined) body.stemMode = streamId(a.stream);
       if (a.range_min !== undefined) body.rangeMin = a.range_min;
       if (a.range_max !== undefined) body.rangeMax = a.range_max;

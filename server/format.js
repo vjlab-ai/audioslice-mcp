@@ -282,14 +282,18 @@ export function formatOutputs(outputs) {
       continue;
     }
     for (const m of mods) {
-      const bits = [`stem ${stemName(m.sourceIndex)}`];
-      if (m.stemMode && m.stemMode !== 1) bits.push(`stream ${m.stemMode}`);
-      if (m.beatModulo > 1) bits.push(`every ${m.beatModulo} beats (${m.beatCountOffset === 0 ? "skip first" : "fire first"})`);
-      if (m.beatPhaseOffsetFrames > 0) bits.push(`+${m.beatPhaseOffsetFrames}fr offset`);
-      if (m.switchMode) bits.push("switch mode");
-      if (m.envEnable) bits.push("envelope");
-      if (m.alpha > 0 && m.alpha < 1) bits.push(`smoothing ${Math.round(alphaToMs(m.alpha))}ms`);
-      if (m.envThreshold > 0) bits.push(`threshold ${m.envThreshold}`);
+      const bits = m.sourceIndex === 15
+        ? [`expression ${JSON.stringify(m.expression || "")}`, m.outputType === 1 ? "integer" : "float"]
+        : [`stem ${stemName(m.sourceIndex)}`];
+      if (m.sourceIndex !== 15) {
+        if (m.stemMode && m.stemMode !== 1) bits.push(`stream ${m.stemMode}`);
+        if (m.beatModulo > 1) bits.push(`every ${m.beatModulo} beats (${m.beatCountOffset === 0 ? "skip first" : "fire first"})`);
+        if (m.beatPhaseOffsetFrames > 0) bits.push(`+${m.beatPhaseOffsetFrames}fr offset`);
+        if (m.switchMode) bits.push("switch mode");
+        if (m.envEnable) bits.push("envelope");
+        if (m.alpha > 0 && m.alpha < 1) bits.push(`smoothing ${Math.round(alphaToMs(m.alpha))}ms`);
+        if (m.envThreshold > 0) bits.push(`threshold ${m.envThreshold}`);
+      }
       if (!m.enabled) bits.push("DISABLED");
       const path = m.path ? m.path : "*** NO OSC PATH - sends nothing ***";
       lines.push(`     [${m.id}] ${path}  (${bits.join(", ")})`);

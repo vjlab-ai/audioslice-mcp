@@ -153,12 +153,18 @@ export const TOOLS = {
   create_modulator: {
     title: "Create a modulator",
     description:
-      "Add a modulator to an output: it takes one data stream from one stem and sends it to an " +
-      "OSC address. The osc_path is what determines where data goes - a modulator without one " +
+      "Add a modulator to an output: it takes one data stream from one stem (or evaluates an " +
+      "AudioSlice expression) and sends it to an OSC address. Provide exactly one of stem or " +
+      "expression. Expression mode reads raw signals each frame and bypasses smoothing, " +
+      "threshold, envelope, inversion and range mapping; only output_type applies. Invalid " +
+      "expressions are rejected with a diagnostic span. The osc_path is what determines where " +
+      "data goes - a modulator without one " +
       "processes audio and transmits nothing, silently. Check analyze_audio first to pick a " +
       "stem that has signal and carries the stream you want; asking for a stream a stem does " +
-      "not have produces silence with no error. Verify the result with describe_modulator " +
-      "afterwards. " +
+      "not have produces silence with no error. For expressions, use functions abs, ceil, floor, " +
+      "round, frac, sqrt, min, max, pow, log, log10, exp, sin, cos, tan, clamp, random, sign and " +
+      "time and beatInBar; constants are uppercase E, PI and TAU. Operators follow C precedence and support " +
+      "short-circuit &&, || and ?: . Verify the result with describe_modulator afterwards. " +
       "\n\n" +
       "The documentation carries a source-by-signal matrix and per-stream guidance - " +
       "search_docs for \"modulators\" before guessing which stem and stream suit what the user is " +
@@ -185,6 +191,21 @@ export const TOOLS = {
         "Which data stream: {{STREAMS}}. Defaults to energy.",
       name:
         "Display label only - has no effect on output.",
+      expression:
+        "Expression source (max 511 UTF-8 bytes). Supplying this selects expression mode instead " +
+        "of a stem. Supports float arithmetic, comparisons, &&, ||, ?:, built-in math functions, " +
+        "E/PI/TAU and raw signals such as vocals.energy, kick.onset and beat. Only valid " +
+        "stem.variable combinations compile; an invalid expression is rejected with byte offsets. " +
+        "Available signals: vocals and bass: energy/pan/spread/pitch; other and drums: " +
+        "energy/pan/spread; kick: energy/onset; snare, hihat, perc and tom: energy/pan/spread/onset; " +
+        "audio: energy/onset; beat.onset, beat_ramp.energy, downbeat.onset and is_music.energy " +
+        "also accept the bare stem name. time() is seconds since app start. beatInBar() returns " +
+        "the current 1-based beat number within the bar as a float, or 0 when no clock source " +
+        "is set; it is a beat counter, not an impulse. Empty expressions and " +
+        "non-finite final results output zero.",
+      output_type:
+        "OSC value type: float (default) or integer. This is the only output transform applied " +
+        "to expression results.",
       range_min:
         "Value sent when the stem level is 0. Default 0.",
       range_max:
@@ -218,7 +239,8 @@ export const TOOLS = {
       "\n\n" +
       "Docs note: search_docs before changing stream or stem - the documentation carries a " +
       "source-by-signal matrix saying which stems carry which streams and how reliably each " +
-      "extracts.",
+      "extracts. Set expression to compile and use an AudioSlice expression; this selects " +
+      "expression mode. Invalid expressions are rejected with a diagnostic byte span.",
     args: {
       threshold:
         "Level below which the modulator sends 0. On the onset stream this is the onset " +
@@ -232,6 +254,14 @@ export const TOOLS = {
       enabled:
         "Whether this modulator transmits at all. Disabling keeps its configuration, so it is the " +
         "reversible way to silence one - prefer it to deleting.",
+      expression:
+        "Expression source (max 511 UTF-8 bytes). Providing this selects expression mode. Invalid " +
+        "syntax or unavailable stem variables are rejected, leaving the previous program active; " +
+        "the diagnostic includes error_start_col and error_end_col byte offsets. Expressions " +
+        "read raw signals and bypass all shaping except output_type.",
+      output_type:
+        "OSC value type: float (default) or integer. This is the only output transform applied " +
+        "to expression results.",
       range_min:
         "Value sent when the stem level is 0.",
       range_max:

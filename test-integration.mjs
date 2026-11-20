@@ -2,6 +2,8 @@
 // running AudioSlice, then puts the configuration back.
 //
 // Run via ./run_build.sh --run-tests, or directly with `node mcp/test-integration.mjs`.
+// AUDIOSLICE_MCP_SERVER names the server to test (a server/index.js); run_build.sh
+// points it at the bundle the app ships, unpacked. The default is this folder's server.
 //
 // The argument matrix is derived from the schemas the server actually declares
 // rather than hand-listed, so adding an argument without testing it fails this
@@ -22,9 +24,11 @@ const TEST_WAV = join(HERE, "..", "tests", "model_test.wav");
 const SCRATCH_OSC_PATH = "/integration/test";
 const http = new AudioSliceClient();
 
+const SERVER = process.env.AUDIOSLICE_MCP_SERVER || join(HERE, "server", "index.js");
+console.log(`MCP server under test: ${SERVER}`);
 const transport = new StdioClientTransport({
   command: process.execPath,
-  args: [join(HERE, "server", "index.js")],
+  args: [SERVER],
 });
 const client = new Client({ name: "integration", version: "0" });
 await client.connect(transport);
@@ -223,6 +227,71 @@ try {
         updatedMod?.beatCountOffset === 1,
         JSON.stringify(updatedMod)
       );
+
+      await call("update_modulator", {
+        output_id: outputId, modulator_id: modId, expression: "2.5", output_type: "float",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      updatedMod = findModulator(await http.get("/outputs"));
+      record("expression update persists source and mode",
+        updatedMod?.sourceIndex === 15 && updatedMod?.expression === "2.5",
+        JSON.stringify(updatedMod));
+      let activity = await http.get(`/outputs/${outputId}/modulators/${modId}/activity`);
+      record("expression evaluates without the prior modulator's shaping",
+        activity.current === 2.5, JSON.stringify(activity));
+
+      const bad = await call("update_modulator", {
+        output_id: outputId, modulator_id: modId, expression: "vocals.onset",
+      }, { expect: "error" });
+      record("invalid expression reports its byte span",
+        bad.includes('"error_start_col":0') && bad.includes('"error_end_col":12'), bad);
+      updatedMod = findModulator(await http.get("/outputs"));
+      record("invalid expression leaves source unchanged", updatedMod?.expression === "2.5",
+        JSON.stringify(updatedMod));
+
+      const listed = await call("list_outputs");
+      record("list_outputs shows expression source without stale shaping",
+        listed.includes('expression "2.5"') && !listed.includes("stem stem_15"), listed);
+
+      const expressionMod = await call("create_modulator", {
+        output_id: outputId, osc_path: SCRATCH_OSC_PATH + "/expression",
+        expression: "1 / 0", output_type: "integer",
+      });
+      const expressionId = Number(expressionMod.match(/Created modulator (\d+)/)?.[1] ?? NaN);
+      record("created expression modulator", Number.isFinite(expressionId), expressionMod);
+      if (Number.isFinite(expressionId)) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        activity = await http.get(`/outputs/${outputId}/modulators/${expressionId}/activity`);
+        record("non-finite expression result evaluates to zero", activity.current === 0,
+          JSON.stringify(activity));
+        await call("update_modulator", {
+          output_id: outputId, modulator_id: expressionId,
+          expression: "beatInBar() == 0 || beatInBar() >= 1",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        activity = await http.get(`/outputs/${outputId}/modulators/${expressionId}/activity`);
+        record("beatInBar context function is available through MCP", activity.current === 1,
+          JSON.stringify(activity));
+        await call("update_modulator", {
+          output_id: outputId, modulator_id: expressionId, expression: "beatInBar(1)",
+        }, { expect: "error" });
+        await call("delete_modulator", { output_id: outputId, modulator_id: expressionId });
+      }
+
+      for (const [source, start, end] of [
+        ["1".repeat(512), 511, 512],
+        ["1\0+2", 1, 2],
+      ]) {
+        try {
+          await http.write("PATCH", `/outputs/${outputId}/modulators/${modId}`, { expression: source });
+          record("reject invalid expression source bytes", false, JSON.stringify(source));
+        } catch (e) {
+          const error = JSON.parse(e.body);
+          record("reject invalid expression source bytes",
+            e.status === 400 && error.error_start_col === start && error.error_end_col === end,
+            e.body);
+        }
+      }
 
       await call("delete_modulator", { output_id: outputId, modulator_id: modId });
       modId = null;

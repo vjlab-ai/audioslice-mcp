@@ -4,7 +4,7 @@ Running, configuring, troubleshooting, and debugging AudioSlice using an AI like
 
 ## Installing the MCP
 
-1. Download the MCP from [Github](https://github.com/vjlab-ai/audioslice-mcp).
+1. Use the `audioslice-mcp-<version>.mcpb` in your AudioSlice download: it's the one tested with your version of AudioSlice. (The newest is on [GitHub](https://github.com/vjlab-ai/audioslice-mcp), for the newest AudioSlice.)
 2. Install the `.mcpb`
     - For macOS: Double click the .mcpb file to install it, accept the permissions
     - For Windows: in Claude Desktop, `Settings > Extensions > Advanced Settings > Install Extension > select .mcpb file`

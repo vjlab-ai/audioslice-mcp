@@ -9,7 +9,8 @@ Read more about using the MCP in the [documentation](https://vjlab.ai/docs/audio
 
 ## Install
 
-1. Download **[audioslice-mcp.mcpb][latest]** — always the current release.
+1. Use the **audioslice-mcp-&lt;version&gt;.mcpb** in your AudioSlice download: it's the one tested with
+   your version of AudioSlice. (Or download **[the latest][latest]**, which goes with the newest AudioSlice.)
 2. Double-click it, and accept the permissions prompt.
 3. Open AudioSlice and play some music.
 4. Ask Claude whether AudioSlice is set up correctly.
